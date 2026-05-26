@@ -1,6 +1,7 @@
 import Cocoa
 
-/// The content view of the switcher overlay. Lays out TileViews in rows.
+/// The content view of the switcher overlay. Lays out TileViews in rows,
+/// with each tile's width adapted to its thumbnail's aspect ratio.
 final class OverlayView: NSVisualEffectView {
 
     private var tileViews: [TileView] = []
@@ -8,10 +9,14 @@ final class OverlayView: NSVisualEffectView {
     private var windows: [WindowInfo] = []
 
     // Layout constants
-    private let maxColumns = 8
     private let interTilePadding: CGFloat = 6
     private let outerPadding: CGFloat = 16
     private let cornerRadius: CGFloat = 14
+
+    /// Max width of the overlay as a fraction of screen width
+    private var maxPanelWidth: CGFloat {
+        (NSScreen.main?.frame.width ?? 1920) * 0.85
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -53,33 +58,81 @@ final class OverlayView: NSVisualEffectView {
             tileViews.append(tile)
         }
 
-        // Calculate layout
-        let columns = min(windows.count, maxColumns)
-        let rows = (windows.count + columns - 1) / columns
+        layoutTiles()
+    }
 
-        let tileW = TileView.tileWidth
-        let tileH = TileView.tileHeight
-        let totalW = outerPadding * 2 + tileW * CGFloat(columns) + interTilePadding * CGFloat(columns - 1)
-        let totalH = outerPadding * 2 + tileH * CGFloat(rows) + interTilePadding * CGFloat(rows - 1)
-
-        // Resize self and panel
-        frame.size = NSSize(width: totalW, height: totalH)
-        if let panel = window as? OverlayPanel {
-            panel.setContentSize(NSSize(width: totalW, height: totalH))
+    /// Refresh tile thumbnails in-place, then re-layout since widths may change.
+    func refreshThumbnails() {
+        for (i, tile) in tileViews.enumerated() where i < windows.count {
+            tile.configure(with: windows[i])
         }
+        layoutTiles()
 
-        // Position tiles (top-left origin, row by row)
-        for (i, tile) in tileViews.enumerated() {
-            let col = i % columns
-            let row = i / columns
-            let x = outerPadding + CGFloat(col) * (tileW + interTilePadding)
-            // NSView coordinates: y=0 is bottom, so first row is at top
-            let y = totalH - outerPadding - tileH - CGFloat(row) * (tileH + interTilePadding)
-            tile.frame = CGRect(x: x, y: y, width: tileW, height: tileH)
+        // Resize panel to match
+        if let panel = window as? OverlayPanel {
+            panel.setContentSize(frame.size)
+            panel.showCentered()
         }
     }
 
-    /// Move selection highlight.
+    // MARK: - Flow layout
+
+    /// Lay out tiles in rows, wrapping when a row exceeds maxPanelWidth.
+    /// Tiles have variable widths but uniform height.
+    private func layoutTiles() {
+        let tileH = TileView.tileHeight
+        let maxW = maxPanelWidth - outerPadding * 2
+
+        // Compute per-tile widths
+        let tileWidths: [CGFloat] = windows.map { TileView.tileWidth(for: $0) }
+
+        // Break into rows
+        var rows: [[Int]] = [[]]  // rows of tile indices
+        var currentRowWidth: CGFloat = 0
+
+        for (i, w) in tileWidths.enumerated() {
+            let needed = currentRowWidth > 0 ? interTilePadding + w : w
+            if currentRowWidth + needed > maxW && !rows[rows.count - 1].isEmpty {
+                // Start new row
+                rows.append([i])
+                currentRowWidth = w
+            } else {
+                rows[rows.count - 1].append(i)
+                currentRowWidth += needed
+            }
+        }
+
+        // Compute actual row widths (for centering) and total panel size
+        var rowWidths: [CGFloat] = []
+        for row in rows {
+            let w = row.reduce(CGFloat(0)) { $0 + tileWidths[$1] }
+                + CGFloat(max(0, row.count - 1)) * interTilePadding
+            rowWidths.append(w)
+        }
+
+        let widestRow = rowWidths.max() ?? 0
+        let totalW = widestRow + outerPadding * 2
+        let totalH = outerPadding * 2 + tileH * CGFloat(rows.count)
+            + interTilePadding * CGFloat(max(0, rows.count - 1))
+
+        frame.size = NSSize(width: totalW, height: totalH)
+
+        // Position tiles — centered per row, top row at top (NSView y=0 is bottom)
+        for (rowIdx, row) in rows.enumerated() {
+            let rowW = rowWidths[rowIdx]
+            var x = outerPadding + (widestRow - rowW) / 2
+            let y = totalH - outerPadding - tileH - CGFloat(rowIdx) * (tileH + interTilePadding)
+
+            for tileIdx in row {
+                let w = tileWidths[tileIdx]
+                tileViews[tileIdx].frame = CGRect(x: x, y: y, width: w, height: tileH)
+                x += w + interTilePadding
+            }
+        }
+    }
+
+    // MARK: - Selection
+
     func setSelectedIndex(_ index: Int) {
         guard index >= 0, index < tileViews.count else { return }
         if selectedIndex < tileViews.count {
@@ -97,28 +150,18 @@ final class OverlayView: NSVisualEffectView {
         return windows.count
     }
 
-    /// Cycle selection forward (wrapping)
     func cycleForward() {
         guard !windows.isEmpty else { return }
         let next = (selectedIndex + 1) % windows.count
         setSelectedIndex(next)
     }
 
-    /// Cycle selection backward (wrapping)
     func cycleBackward() {
         guard !windows.isEmpty else { return }
         let prev = (selectedIndex - 1 + windows.count) % windows.count
         setSelectedIndex(prev)
     }
 
-    /// Refresh tile thumbnails in-place without rebuilding layout.
-    func refreshThumbnails() {
-        for (i, tile) in tileViews.enumerated() where i < windows.count {
-            tile.configure(with: windows[i])
-        }
-    }
-
-    /// Get the currently selected window.
     func selectedWindow() -> WindowInfo? {
         guard selectedIndex >= 0, selectedIndex < windows.count else { return nil }
         return windows[selectedIndex]

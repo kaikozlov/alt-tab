@@ -1,6 +1,7 @@
 import Cocoa
 
 /// A single window tile in the switcher overlay: thumbnail + app icon + title.
+/// Tile width adapts to the thumbnail's aspect ratio. Height is fixed.
 final class TileView: NSView {
 
     private let thumbnailLayer = CALayer()
@@ -13,16 +14,46 @@ final class TileView: NSView {
         didSet { updateHighlight() }
     }
 
-    // Layout constants
-    static let thumbnailWidth: CGFloat = 200
+    // Layout constants — height is fixed, width varies with aspect ratio
     static let thumbnailHeight: CGFloat = 130
+    static let minThumbnailWidth: CGFloat = 100
+    static let maxThumbnailWidth: CGFloat = 280
     static let iconSize: CGFloat = 20
     static let titleHeight: CGFloat = 18
     static let padding: CGFloat = 8
     static let cornerRadius: CGFloat = 10
 
-    static var tileWidth: CGFloat { thumbnailWidth + padding * 2 }
-    static var tileHeight: CGFloat { padding + thumbnailHeight + 6 + iconSize + 2 + titleHeight + padding }
+    /// Fixed height for all tiles
+    static var tileHeight: CGFloat {
+        padding + thumbnailHeight + 6 + iconSize + 2 + titleHeight + padding
+    }
+
+    /// Compute tile width from a thumbnail's aspect ratio.
+    static func tileWidth(for window: WindowInfo) -> CGFloat {
+        let thumbW = thumbnailWidth(for: window)
+        return thumbW + padding * 2
+    }
+
+    /// Compute thumbnail display width from a window's thumbnail or fallback dimensions.
+    static func thumbnailWidth(for window: WindowInfo) -> CGFloat {
+        let imageWidth: CGFloat
+        let imageHeight: CGFloat
+
+        if let thumb = window.thumbnail {
+            imageWidth = CGFloat(thumb.width)
+            imageHeight = CGFloat(thumb.height)
+        } else {
+            // Before thumbnails are captured, assume 16:10 (standard Mac ratio)
+            imageWidth = 16
+            imageHeight = 10
+        }
+
+        guard imageHeight > 0 else { return minThumbnailWidth }
+
+        let ratio = imageWidth / imageHeight
+        let w = (thumbnailHeight * ratio).rounded()
+        return min(max(w, minThumbnailWidth), maxThumbnailWidth)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -42,7 +73,7 @@ final class TileView: NSView {
         highlightLayer.isHidden = true
         layer!.addSublayer(highlightLayer)
 
-        // Thumbnail
+        // Thumbnail — resizeAspectFill + clip so the image fills the thumbnail area
         thumbnailLayer.contentsGravity = .resizeAspect
         thumbnailLayer.cornerRadius = 6
         thumbnailLayer.masksToBounds = true
@@ -70,14 +101,13 @@ final class TileView: NSView {
         if let thumb = window.thumbnail {
             thumbnailLayer.contents = thumb
         } else {
-            // Show app icon as placeholder
             thumbnailLayer.contents = window.appIcon?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         }
 
         // App icon
         iconView.image = window.appIcon
 
-        // Title — show "AppName — WindowTitle" or just title
+        // Title
         let displayTitle: String
         if window.title == window.appName || window.title.isEmpty {
             displayTitle = window.appName
@@ -91,7 +121,6 @@ final class TileView: NSView {
         super.layout()
         let p = TileView.padding
         let w = bounds.width
-        _ = bounds.height
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)

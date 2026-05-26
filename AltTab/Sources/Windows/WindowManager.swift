@@ -65,7 +65,7 @@ final class WindowManager {
             discoverWindows(pid: pid, appName: app.localizedName ?? "Unknown", bundleId: app.bundleIdentifier, icon: app.icon)
             if windows.count != before { changed = true }
         }
-        for win in windows { win.refreshContentSize() }
+        for win in windows { changed = win.refreshContentSize() || changed }
         let focusChanged = syncFocusedWindowFromSystem()
         if changed || focusChanged {
             sortByFocusOrder()

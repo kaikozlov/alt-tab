@@ -89,10 +89,10 @@ final class OverlayView: NSVisualEffectView {
     func refreshThumbnail(for windowId: CGWindowID) {
         guard let index = windows.firstIndex(where: { $0.windowId == windowId }), index < tileViews.count else { return }
         guard windows[index].thumbnail != nil else { return }
-        let widthsBefore = windows.map { TileView.tileWidth(for: $0) }
+        let widthBefore = TileView.tileWidth(for: windows[index])
         tileViews[index].setThumbnailContents(windows[index].thumbnail)
         tileViews[index].layoutSubtreeIfNeeded()
-        guard windows.map({ TileView.tileWidth(for: $0) }) != widthsBefore else { return }
+        guard TileView.tileWidth(for: windows[index]) != widthBefore else { return }
         layoutTiles()
         (window as? OverlayPanel)?.setContentSize(frame.size)
     }

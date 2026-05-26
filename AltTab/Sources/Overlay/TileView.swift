@@ -19,10 +19,7 @@ final class TileView: NSView {
     static let padding: CGFloat = 12
     static let titleGap: CGFloat = 8
     static let cornerRadius: CGFloat = 10
-
-    static var tileHeight: CGFloat {
-        padding + thumbnailHeight + titleGap + max(iconSize, titleHeight) + padding
-    }
+    static let tileHeight: CGFloat = padding + thumbnailHeight + titleGap + max(iconSize, titleHeight) + padding
 
     static func tileWidth(for window: WindowInfo) -> CGFloat {
         return thumbnailDisplaySize(for: window).width + padding * 2

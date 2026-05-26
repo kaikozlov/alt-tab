@@ -82,8 +82,12 @@ final class WindowInfo: @unchecked Sendable {
         return cgBounds(windowId)
     }
 
-    func refreshContentSize() {
-        contentSize = WindowInfo.contentSize(axElement: axElement, windowId: windowId)
+    @discardableResult
+    func refreshContentSize() -> Bool {
+        let size = WindowInfo.contentSize(axElement: axElement, windowId: windowId)
+        guard size != contentSize else { return false }
+        contentSize = size
+        return true
     }
 
     private static func axSize(_ el: AXUIElement) -> CGSize? {

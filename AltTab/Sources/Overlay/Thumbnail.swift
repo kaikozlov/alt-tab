@@ -1,5 +1,5 @@
 import Cocoa
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 
 enum ThumbnailCapture {
     enum Source { case afterShowUi, externalEvent }
@@ -15,6 +15,7 @@ enum ThumbnailCapture {
         queue.qualityOfService = .userInteractive
         return queue
     }()
+    private static let colorSpace = CGColorSpaceCreateDeviceRGB()
 
     @available(macOS 14.0, *)
     private static let cachedSCWindows = LockedArray<SCWindow>()
@@ -22,7 +23,7 @@ enum ThumbnailCapture {
     @MainActor
     static func refreshAsync(_ windows: [WindowInfo], source: Source = .externalEvent, prioritizedIds: Set<CGWindowID>? = nil) {
         guard captureInBackground || switcherIsActive() else { return }
-        var eligible = windows.filter { $0.windowId != 0 && $0.thumbnail == nil }
+        let eligible = windows.filter { $0.windowId != 0 && $0.thumbnail == nil }
         guard !eligible.isEmpty else { return }
         let prioritized = prioritizedIds ?? []
         let sorted = eligible.sorted { prioritized.contains($0.windowId) && !prioritized.contains($1.windowId) }
@@ -72,10 +73,11 @@ enum ThumbnailCapture {
     @available(macOS 14.0, *)
     private static func sortCachedAndNotCached(_ ids: [CGWindowID]) -> ([SCWindow], [CGWindowID]) {
         cachedSCWindows.withLock { cache in
+            let byId = Dictionary(uniqueKeysWithValues: cache.map { ($0.windowID, $0) })
             var cached = [SCWindow]()
             var missing = [CGWindowID]()
             for id in ids {
-                if let scWindow = cache.first(where: { $0.windowID == id }) { cached.append(scWindow) }
+                if let scWindow = byId[id] { cached.append(scWindow) }
                 else { missing.append(id) }
             }
             return (cached, missing)
@@ -162,7 +164,7 @@ enum ThumbnailCapture {
         let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
         guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
         let context = CGContext(data: baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: bytesPerRow,
-                                space: CGColorSpaceCreateDeviceRGB(),
+                                space: colorSpace,
                                 bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue).rawValue)
         return context?.makeImage()
     }

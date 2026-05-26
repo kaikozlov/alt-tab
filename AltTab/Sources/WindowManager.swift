@@ -23,14 +23,21 @@ final class WindowManager {
             addApp(app)
         }
 
-        // Observe new launches / quits
+        // Observe new launches / quits by diffing old vs new arrays
         appObservation = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) { [weak self] _, change in
             guard let self else { return }
-            if let added = change.newValue {
-                for app in added { self.addApp(app) }
+            let oldApps = change.oldValue ?? []
+            let newApps = change.newValue ?? []
+            let oldPids = Set(oldApps.map { $0.processIdentifier })
+            let newPids = Set(newApps.map { $0.processIdentifier })
+
+            // Apps that just launched
+            for app in newApps where !oldPids.contains(app.processIdentifier) {
+                self.addApp(app)
             }
-            if let removed = change.oldValue {
-                for app in removed { self.removeApp(app) }
+            // Apps that just quit
+            for app in oldApps where !newPids.contains(app.processIdentifier) {
+                self.removeApp(app)
             }
         }
 
@@ -41,6 +48,15 @@ final class WindowManager {
     /// Returns windows in focus order, suitable for display in the switcher.
     func sortedWindows() -> [WindowInfo] {
         return windows
+    }
+
+    /// Remove all windows belonging to a pid and clean up its observer.
+    func removeWindows(forPid pid: pid_t) {
+        windows.removeAll { $0.pid == pid }
+        if let observer = observers.removeValue(forKey: pid) {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+        }
+        reindex()
     }
 
     // MARK: - App tracking

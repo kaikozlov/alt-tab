@@ -122,18 +122,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastQuitPid = window.pid
         }
 
-        // Refresh the panel after a short delay to let the app die
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self, Hotkey.shared.panelIsOpen else { return }
-            let windows = WindowManager.shared.sortedWindows()
-            if windows.isEmpty {
-                self.dismissSwitcher()
-            } else {
-                let idx = min(self.overlayView.getSelectedIndex(), windows.count - 1)
-                self.overlayView.update(windows: windows, selectedIndex: idx)
-                self.panel.setContentSize(self.overlayView.frame.size)
-                self.panel.showCentered()
-            }
+        // Immediately remove this app's windows from the list and refresh
+        WindowManager.shared.removeWindows(forPid: window.pid)
+        refreshSwitcherPanel()
+    }
+
+    /// Refresh the switcher panel with current window list, or dismiss if empty.
+    private func refreshSwitcherPanel() {
+        guard Hotkey.shared.panelIsOpen else { return }
+        let windows = WindowManager.shared.sortedWindows()
+        if windows.isEmpty {
+            dismissSwitcher()
+        } else {
+            let idx = min(overlayView.getSelectedIndex(), windows.count - 1)
+            overlayView.update(windows: windows, selectedIndex: idx)
+            panel.setContentSize(overlayView.frame.size)
+            panel.showCentered()
         }
     }
 

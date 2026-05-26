@@ -1,6 +1,7 @@
 import Cocoa
 import Carbon.HIToolbox
 
+@MainActor
 final class Hotkey {
     static let shared = Hotkey()
 

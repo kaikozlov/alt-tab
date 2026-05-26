@@ -4,5 +4,5 @@ import ApplicationServices
 /// may be another accessibility object. Check the CFTypeID first, then bridge.
 func safeAXElement(from value: AnyObject?) -> AXUIElement? {
     guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-    return unsafeBitCast(value, to: AXUIElement.self)
+    return unsafeDowncast(value, to: AXUIElement.self)
 }

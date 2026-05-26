@@ -3,6 +3,7 @@ import ApplicationServices
 
 /// Tracks all windows across all running applications using Accessibility APIs.
 /// No polling — uses AX observers + KVO for real-time updates.
+@MainActor
 final class WindowManager {
     static let shared = WindowManager()
 
@@ -35,12 +36,14 @@ final class WindowManager {
             addApp(app)
         }
         appObservation = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) { [weak self] _, change in
-            guard let self else { return }
-            if let launched = change.newValue {
-                for app in launched { self.addApp(app) }
-            }
-            if let terminated = change.oldValue {
-                for app in terminated { self.removeApp(app) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let launched = change.newValue {
+                    for app in launched { self.addApp(app) }
+                }
+                if let terminated = change.oldValue {
+                    for app in terminated { self.removeApp(app) }
+                }
             }
         }
         sortByZOrder()

@@ -90,7 +90,7 @@ final class TileView: NSView {
 
     func configure(with window: WindowInfo) {
         windowInfo = window
-        thumbnailLayer.contents = window.thumbnail ?? window.appIcon?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        thumbnailLayer.contents = window.thumbnail ?? window.appIconCGImage
         iconView.image = window.appIcon
         titleLabel.stringValue = displayTitle(for: window)
     }

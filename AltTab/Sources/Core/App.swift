@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: OverlayPanel!
     private var overlayView: OverlayView!
@@ -76,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeSelectedWindow() {
         guard let window = overlayView.selectedWindow() else { return }
         window.closeSoftly { [weak self] in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 WindowManager.shared.syncWithRunningApplications()
                 self?.refreshSwitcherPanel()
             }

@@ -63,17 +63,23 @@ final class OverlayView: NSVisualEffectView {
     func update(windows: [WindowInfo], selectedIndex: Int) {
         self.windows = windows
         self.selectedIndex = selectedIndex
-        for tile in tileViews { tile.removeFromSuperview() }
-        tileViews.removeAll()
+        resizeTilePool(to: windows.count)
         guard !windows.isEmpty else { return }
         for (i, window) in windows.enumerated() {
-            let tile = TileView(frame: .zero)
+            let tile = tileViews[i]
             tile.configure(with: window)
             tile.isHighlighted = (i == selectedIndex)
+        }
+        layoutTiles()
+    }
+
+    private func resizeTilePool(to count: Int) {
+        while tileViews.count > count { tileViews.removeLast().removeFromSuperview() }
+        while tileViews.count < count {
+            let tile = TileView(frame: .zero)
             addSubview(tile)
             tileViews.append(tile)
         }
-        layoutTiles()
     }
 
     func refreshThumbnails() {

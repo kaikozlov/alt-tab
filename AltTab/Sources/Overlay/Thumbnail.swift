@@ -14,12 +14,12 @@ enum ThumbnailCapture {
 
     /// Capture thumbnails for all windows, then call completion on main thread.
     /// Does not clear existing thumbnails; callers decide when a fresh session should release.
-    static func captureAll(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+    static func captureAll(_ windows: [WindowInfo], completion: @escaping @MainActor @Sendable () -> Void) {
         capture(windows, completion: completion)
     }
 
     /// Capture only windows that don't currently have a thumbnail.
-    static func captureMissing(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+    static func captureMissing(_ windows: [WindowInfo], completion: @escaping @MainActor @Sendable () -> Void) {
         capture(windows.filter { $0.thumbnail == nil }, completion: completion)
     }
 
@@ -28,8 +28,11 @@ enum ThumbnailCapture {
         for window in windows { window.thumbnail = nil }
     }
 
-    private static func capture(_ windows: [WindowInfo], completion: @escaping () -> Void) {
-        guard !windows.isEmpty else { completion(); return }
+    private static func capture(_ windows: [WindowInfo], completion: @escaping @MainActor @Sendable () -> Void) {
+        guard !windows.isEmpty else {
+            DispatchQueue.main.async { completion() }
+            return
+        }
         if #available(macOS 14.0, *) {
             captureAllWithSCKit(windows, completion: completion)
         } else {
@@ -40,7 +43,7 @@ enum ThumbnailCapture {
     // MARK: - SCKit primary path
 
     @available(macOS 14.0, *)
-    private static func captureAllWithSCKit(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+    private static func captureAllWithSCKit(_ windows: [WindowInfo], completion: @escaping @MainActor @Sendable () -> Void) {
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
             guard let content, error == nil else {
                 captureAllWithPrivateAPI(windows, completion: completion)
@@ -67,12 +70,12 @@ enum ThumbnailCapture {
                     }
                 }
             }
-            group.notify(queue: .main, execute: completion)
+            group.notify(queue: .main) { MainActor.assumeIsolated { completion() } }
         }
     }
 
     @available(macOS 14.0, *)
-    private static func capture(_ scWindow: SCWindow, into window: WindowInfo, completion: @escaping () -> Void) {
+    private static func capture(_ scWindow: SCWindow, into window: WindowInfo, completion: @escaping @MainActor @Sendable () -> Void) {
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         let config = captureConfig(for: scWindow)
         SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config) { buffer, error in
@@ -108,7 +111,7 @@ enum ThumbnailCapture {
 
     // MARK: - Private fallback
 
-    private static func captureAllWithPrivateAPI(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+    private static func captureAllWithPrivateAPI(_ windows: [WindowInfo], completion: @escaping @MainActor @Sendable () -> Void) {
         let group = DispatchGroup()
         for window in windows {
             group.enter()
@@ -120,7 +123,7 @@ enum ThumbnailCapture {
                 }
             }
         }
-        group.notify(queue: .main, execute: completion)
+        group.notify(queue: .main) { MainActor.assumeIsolated { completion() } }
     }
 
     private static func captureWithPrivateAPI(_ wid: CGWindowID) -> CGImage? {

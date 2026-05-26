@@ -1,6 +1,24 @@
 import Cocoa
 import ScreenCaptureKit
 
+private final class PermissionProbe: @unchecked Sendable {
+    private let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var result = false
+
+    func finish(_ granted: Bool) {
+        lock.lock(); result = granted; lock.unlock()
+        semaphore.signal()
+    }
+
+    func wait(timeout: DispatchTime = .now() + 5) -> Bool {
+        _ = semaphore.wait(timeout: timeout)
+        lock.lock(); let value = result; lock.unlock()
+        return value
+    }
+}
+
+@MainActor
 enum Permissions {
 
     /// Block until both Accessibility and Screen Recording are granted.
@@ -13,14 +31,10 @@ enum Permissions {
     // MARK: - Accessibility
 
     private static func ensureAccessibility() {
-        // First check without prompt
         if AXIsProcessTrustedWithOptions(nil) { return }
-
-        // Prompt the user
-        let opts = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
+        let opts = ["AXTrustedCheckOptionPrompt" as CFString: true] as CFDictionary
         AXIsProcessTrustedWithOptions(opts)
 
-        // Poll until granted
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
         alert.informativeText = "AltTab needs Accessibility access to track windows.\n\nPlease grant it in System Settings → Privacy & Security → Accessibility, then click OK."
@@ -39,15 +53,7 @@ enum Permissions {
     // MARK: - Screen Recording
 
     private static func ensureScreenRecording() {
-        let semaphore = DispatchSemaphore(value: 0)
-        var granted = false
-
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
-            granted = (error == nil && content != nil)
-            semaphore.signal()
-        }
-        _ = semaphore.wait(timeout: .now() + 5)
-
+        var granted = hasScreenRecordingAccess()
         if granted { return }
 
         let alert = NSAlert()
@@ -59,13 +65,15 @@ enum Permissions {
         while !granted {
             let response = alert.runModal()
             if response == .alertSecondButtonReturn { return }
-
-            let sem2 = DispatchSemaphore(value: 0)
-            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
-                granted = (error == nil && content != nil)
-                sem2.signal()
-            }
-            _ = sem2.wait(timeout: .now() + 5)
+            granted = hasScreenRecordingAccess()
         }
+    }
+
+    private static func hasScreenRecordingAccess() -> Bool {
+        let probe = PermissionProbe()
+        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
+            probe.finish(error == nil && content != nil)
+        }
+        return probe.wait()
     }
 }

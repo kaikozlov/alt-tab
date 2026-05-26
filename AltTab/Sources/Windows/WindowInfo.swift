@@ -1,7 +1,7 @@
-import Cocoa
+@preconcurrency import Cocoa
 
 /// Lightweight model for a single window tracked by the switcher.
-final class WindowInfo {
+final class WindowInfo: @unchecked Sendable {
     let windowId: CGWindowID
     let axElement: AXUIElement
     let pid: pid_t
@@ -9,6 +9,7 @@ final class WindowInfo {
     let bundleId: String?
     var title: String
     var appIcon: NSImage?
+    let appIconCGImage: CGImage?
     var thumbnail: CGImage?
     var lastFocusOrder: Int = 0
     var isMinimized: Bool = false
@@ -24,6 +25,7 @@ final class WindowInfo {
         self.bundleId = bundleId
         self.title = title
         self.appIcon = appIcon
+        self.appIconCGImage = appIcon?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
     /// Bring this window to the front and make it key.
@@ -38,10 +40,11 @@ final class WindowInfo {
     }
 
     /// Press the window's close button via AX, equivalent to clicking the red traffic-light button.
-    func closeSoftly(completion: (() -> Void)? = nil) {
+    func closeSoftly(completion: (@MainActor @Sendable () -> Void)? = nil) {
+        let element = axElement
         WindowInfo.commandQueue.async {
             var value: AnyObject?
-            let error = AXUIElementCopyAttributeValue(self.axElement, kAXCloseButtonAttribute as CFString, &value)
+            let error = AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &value)
             let button = safeAXElement(from: value)
             let pressed = error == .success && button.map {
                 AXUIElementPerformAction($0, kAXPressAction as CFString) == .success

@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: OverlayPanel!
     private var overlayView: OverlayView!
     private var statusItem: NSStatusItem?
+    private var isPreparingSwitcher = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Check permissions
@@ -72,24 +73,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Switcher lifecycle
 
     private func showSwitcher() {
+        guard !isPreparingSwitcher else { return }
         WindowManager.shared.syncWithRunningApplications()
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { return }
 
-        // If sync found new windows, give them a fast thumbnail before first paint.
-        ThumbnailCapture.fillMissingFastSync(windows)
-        Hotkey.shared.setPanelOpen(true)
-
-        // Show panel with cached thumbnails immediately; async refresh may improve them later.
-        let initialIndex = windows.count > 1 ? 1 : 0
-        overlayView.update(windows: windows, selectedIndex: initialIndex)
-        panel.setContentSize(overlayView.frame.size)
-        panel.showCentered()
-
-        // Refresh any stale/missing thumbnails in the background
+        isPreparingSwitcher = true
         ThumbnailCapture.captureAll(windows) { [weak self] in
-            guard let self, Hotkey.shared.panelIsOpen else { return }
-            self.overlayView.refreshThumbnails()
+            guard let self else { return }
+            self.isPreparingSwitcher = false
+            guard NSEvent.modifierFlags.contains(.command) else {
+                ThumbnailCapture.releaseAll(windows)
+                return
+            }
+
+            Hotkey.shared.setPanelOpen(true)
+            let initialIndex = windows.count > 1 ? 1 : 0
+            self.overlayView.update(windows: windows, selectedIndex: initialIndex)
+            self.panel.setContentSize(self.overlayView.frame.size)
+            self.panel.showCentered()
         }
     }
 
@@ -105,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissSwitcher() {
         panel.dismiss()
         Hotkey.shared.setPanelOpen(false)
-        // Thumbnails stay cached for instant display next time
+        ThumbnailCapture.releaseAll(WindowManager.shared.sortedWindows())
     }
 
     /// Quit the app owning the selected window. First press = graceful terminate,

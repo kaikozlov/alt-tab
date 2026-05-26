@@ -88,9 +88,6 @@ final class WindowManager {
             let before = windows.count
             discoverWindows(pid: pid, appName: app.localizedName ?? "Unknown", bundleId: app.bundleIdentifier, icon: app.icon)
             if windows.count != before {
-                for win in windows where win.pid == pid {
-                    ThumbnailCapture.cacheInBackground(win)
-                }
                 changed = true
             }
         }
@@ -172,19 +169,12 @@ final class WindowManager {
                 if !self.windows.contains(where: { $0.pid == pid }) {
                     self.discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
                     if self.windows.contains(where: { $0.pid == pid }) {
-                        for win in self.windows where win.pid == pid {
-                            ThumbnailCapture.cacheInBackground(win)
-                        }
                         self.onChange?()
                     }
                 }
             }
         }
 
-        // Capture initial thumbnails
-        for win in windows where win.pid == pid {
-            ThumbnailCapture.cacheInBackground(win)
-        }
     }
 
     private func removeApp(_ app: NSRunningApplication) {
@@ -283,13 +273,11 @@ final class WindowManager {
         case kAXWindowMiniaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = true
-                ThumbnailCapture.cacheInBackground(win)
             }
 
         case kAXWindowDeminiaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = false
-                ThumbnailCapture.cacheInBackground(win)
             }
 
         default:
@@ -307,8 +295,7 @@ final class WindowManager {
         let bundleId = app?.bundleIdentifier
         let icon = app?.icon
 
-        if let win = addWindowIfNew(element, pid: pid, appName: appName, bundleId: bundleId, icon: icon) {
-            ThumbnailCapture.cacheInBackground(win)
+        if addWindowIfNew(element, pid: pid, appName: appName, bundleId: bundleId, icon: icon) != nil {
             onChange?()
         }
     }
@@ -347,7 +334,6 @@ final class WindowManager {
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
             windows.insert(win, at: 0)
             reindex()
-            ThumbnailCapture.cacheInBackground(win)
         } else {
             let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
             if let info = addWindowIfNew(focusedElement, pid: pid, appName: app?.localizedName ?? "Unknown",
@@ -357,7 +343,6 @@ final class WindowManager {
                     windows.insert(w, at: 0)
                     reindex()
                 }
-                ThumbnailCapture.cacheInBackground(info)
                 onChange?()
             }
         }

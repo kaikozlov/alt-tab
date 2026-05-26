@@ -1,187 +1,52 @@
 import Cocoa
 import ScreenCaptureKit
 
-/// Window thumbnail capture with background caching.
+/// On-demand thumbnail capture. No caching, no background refresh.
 ///
-/// Thumbnails are captured proactively whenever windows change (focus, create, deminiaturize)
-/// and cached on WindowInfo.thumbnail. When the switcher opens, thumbnails are already ready.
-///
-/// Primary path: SCScreenCaptureKit (macOS 14+) via `desktopIndependentWindow` filter —
-/// captures full window content regardless of on-screen position (critical for AeroSpace).
-/// Fallback: CGSHWCaptureWindowList (private API) for minimized windows.
+/// Cmd+Tab captures the current window list, then the overlay is shown once thumbnails are ready.
+/// SCKit is the primary path because `desktopIndependentWindow` captures full content for
+/// offscreen/AeroSpace-managed windows. Private CGSHWCaptureWindowList is only a fallback.
 enum ThumbnailCapture {
 
     private static let captureQueue = DispatchQueue(label: "dev.kai.AltTab.capture", attributes: .concurrent)
 
-    /// Cached SCShareableContent to avoid repeated expensive OS calls.
-    /// Refreshed on each captureAll, and periodically by captureSingle.
-    @available(macOS 14.0, *)
-    private static var cachedSCWindows: [SCWindow] = []
-    private static var lastSCContentFetch: Date = .distantPast
-
-    /// How often to re-fetch SCShareableContent (seconds)
-    private static let scContentTTL: TimeInterval = 2.0
-
-    // MARK: - Single window capture (background caching)
-
-    /// Capture a single window's thumbnail in the background. Result cached on window.thumbnail.
-    /// Called by WindowManager on AX events. Fire-and-forget.
-    static func cacheInBackground(_ window: WindowInfo) {
-        if window.isMinimized {
-            captureQueue.async {
-                let image = captureWithPrivateAPI(window.windowId)
-                DispatchQueue.main.async {
-                    window.thumbnail = image
-                }
-            }
-            return
-        }
-
-        if #available(macOS 14.0, *) {
-            captureSingleWithSCKit(window)
-        } else {
-            captureQueue.async {
-                let image = captureWithPrivateAPI(window.windowId)
-                DispatchQueue.main.async {
-                    window.thumbnail = image
-                }
-            }
-        }
-    }
-
-    @available(macOS 14.0, *)
-    private static func captureSingleWithSCKit(_ window: WindowInfo) {
-        // Use cached SCWindows if fresh enough
-        let age = Date().timeIntervalSince(lastSCContentFetch)
-        if age < scContentTTL, let scWindow = cachedSCWindows.first(where: { $0.windowID == window.windowId }) {
-            captureSCWindow(scWindow, into: window)
-            return
-        }
-
-        // Refresh cache
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
-            guard let content, error == nil else {
-                // Fallback to private API
-                captureQueue.async {
-                    let image = captureWithPrivateAPI(window.windowId)
-                    DispatchQueue.main.async { window.thumbnail = image }
-                }
-                return
-            }
-            DispatchQueue.main.async {
-                cachedSCWindows = content.windows
-                lastSCContentFetch = Date()
-                if let scWindow = cachedSCWindows.first(where: { $0.windowID == window.windowId }) {
-                    captureSCWindow(scWindow, into: window)
-                }
-            }
-        }
-    }
-
-    // MARK: - Show-time fast fill
-
-    /// Fill only missing thumbnails synchronously using the fast private capture path.
-    /// This prevents icon-only placeholder tiles if lifecycle sync discovers windows right
-    /// before the overlay opens. SCKit still refreshes asynchronously afterward for
-    /// offscreen/AeroSpace-correct captures.
-    static func fillMissingFastSync(_ windows: [WindowInfo]) {
-        for window in windows where window.thumbnail == nil {
-            window.thumbnail = captureWithPrivateAPI(window.windowId)
-        }
-    }
-
-    // MARK: - Bulk capture (refresh all on switcher show)
-
-    /// Capture thumbnails for all windows. Completion called on main thread.
-    /// Uses cached SCShareableContent or fetches fresh if stale.
+    /// Capture thumbnails for all windows, then call completion on main thread.
     static func captureAll(_ windows: [WindowInfo], completion: @escaping () -> Void) {
         guard !windows.isEmpty else { completion(); return }
+        releaseAll(windows)
 
-        let minimized = windows.filter { $0.isMinimized }
-        let normal = windows.filter { !$0.isMinimized }
-        let group = DispatchGroup()
-
-        // Minimized: private API only
-        for window in minimized {
-            group.enter()
-            captureQueue.async {
-                let image = captureWithPrivateAPI(window.windowId)
-                DispatchQueue.main.async {
-                    window.thumbnail = image
-                    group.leave()
-                }
-            }
+        if #available(macOS 14.0, *) {
+            captureAllWithSCKit(windows, completion: completion)
+        } else {
+            captureAllWithPrivateAPI(windows, completion: completion)
         }
-
-        // Normal: SCKit (or private API pre-macOS 14)
-        if !normal.isEmpty {
-            group.enter()
-            if #available(macOS 14.0, *) {
-                captureAllWithSCKit(normal) { group.leave() }
-            } else {
-                let inner = DispatchGroup()
-                for window in normal {
-                    inner.enter()
-                    captureQueue.async {
-                        let image = captureWithPrivateAPI(window.windowId)
-                        DispatchQueue.main.async {
-                            window.thumbnail = image
-                            inner.leave()
-                        }
-                    }
-                }
-                inner.notify(queue: .main) { group.leave() }
-            }
-        }
-
-        group.notify(queue: .main) { completion() }
     }
+
+    /// Release thumbnails. Called before each fresh capture and when the panel closes.
+    static func releaseAll(_ windows: [WindowInfo]) {
+        for window in windows { window.thumbnail = nil }
+    }
+
+    // MARK: - SCKit primary path
 
     @available(macOS 14.0, *)
     private static func captureAllWithSCKit(_ windows: [WindowInfo], completion: @escaping () -> Void) {
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
             guard let content, error == nil else {
-                // Fall back to private API
-                let group = DispatchGroup()
-                for window in windows {
-                    group.enter()
-                    captureQueue.async {
-                        let image = captureWithPrivateAPI(window.windowId)
-                        DispatchQueue.main.async {
-                            window.thumbnail = image
-                            group.leave()
-                        }
-                    }
-                }
-                group.notify(queue: .main) { completion() }
+                captureAllWithPrivateAPI(windows, completion: completion)
                 return
             }
 
-            DispatchQueue.main.async {
-                cachedSCWindows = content.windows
-                lastSCContentFetch = Date()
-            }
-
             var scMap: [CGWindowID: SCWindow] = [:]
-            for scWin in content.windows { scMap[scWin.windowID] = scWin }
+            for scWindow in content.windows {
+                scMap[scWindow.windowID] = scWindow
+            }
 
             let group = DispatchGroup()
             for window in windows {
                 group.enter()
-                if let scWin = scMap[window.windowId] {
-                    let filter = SCContentFilter(desktopIndependentWindow: scWin)
-                    let config = captureConfig(for: scWin)
-
-                    SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config) { buffer, err in
-                        var image: CGImage?
-                        if let buffer, err == nil, let pb = buffer.imageBuffer {
-                            image = cgImageFromPixelBuffer(pb)
-                        }
-                        DispatchQueue.main.async {
-                            window.thumbnail = image
-                            group.leave()
-                        }
-                    }
+                if !window.isMinimized, let scWindow = scMap[window.windowId] {
+                    capture(scWindow, into: window) { group.leave() }
                 } else {
                     captureQueue.async {
                         let image = captureWithPrivateAPI(window.windowId)
@@ -192,24 +57,23 @@ enum ThumbnailCapture {
                     }
                 }
             }
-            group.notify(queue: .main) { completion() }
+            group.notify(queue: .main, execute: completion)
         }
     }
 
-    // MARK: - Shared helpers
-
     @available(macOS 14.0, *)
-    private static func captureSCWindow(_ scWindow: SCWindow, into window: WindowInfo) {
+    private static func capture(_ scWindow: SCWindow, into window: WindowInfo, completion: @escaping () -> Void) {
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         let config = captureConfig(for: scWindow)
-
         SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config) { buffer, error in
             var image: CGImage?
-            if let buffer, error == nil, let pb = buffer.imageBuffer {
-                image = cgImageFromPixelBuffer(pb)
+            if let buffer, error == nil, let pixelBuffer = buffer.imageBuffer {
+                image = cgImageFromPixelBuffer(pixelBuffer)
             }
+            let finalImage = image ?? captureWithPrivateAPI(window.windowId)
             DispatchQueue.main.async {
-                window.thumbnail = image
+                window.thumbnail = finalImage
+                completion()
             }
         }
     }
@@ -232,6 +96,23 @@ enum ThumbnailCapture {
         return config
     }
 
+    // MARK: - Private fallback
+
+    private static func captureAllWithPrivateAPI(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+        let group = DispatchGroup()
+        for window in windows {
+            group.enter()
+            captureQueue.async {
+                let image = captureWithPrivateAPI(window.windowId)
+                DispatchQueue.main.async {
+                    window.thumbnail = image
+                    group.leave()
+                }
+            }
+        }
+        group.notify(queue: .main, execute: completion)
+    }
+
     private static func captureWithPrivateAPI(_ wid: CGWindowID) -> CGImage? {
         var windowId = wid
         let list = CGSHWCaptureWindowList(CGS_CONNECTION, &windowId, 1,
@@ -239,6 +120,8 @@ enum ThumbnailCapture {
             .takeRetainedValue() as! [CGImage]
         return list.first
     }
+
+    // MARK: - Pixel buffer → CGImage
 
     private static func cgImageFromPixelBuffer(_ pixelBuffer: CVPixelBuffer) -> CGImage? {
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
@@ -255,10 +138,5 @@ enum ThumbnailCapture {
                                 space: CGColorSpaceCreateDeviceRGB(),
                                 bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue).rawValue)
         return context?.makeImage()
-    }
-
-    /// Release all thumbnails to free memory.
-    static func releaseAll(_ windows: [WindowInfo]) {
-        for window in windows { window.thumbnail = nil }
     }
 }

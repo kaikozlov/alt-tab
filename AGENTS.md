@@ -29,20 +29,63 @@ Sources/
 This is an Xcode project because we need a proper `.app` bundle with `Info.plist`, entitlements, and code signing for `CGEventTap` + private APIs.
 
 ```bash
-# Build app
 xcodebuild -scheme AltTab -configuration Debug build
-
-# Run unit tests (pure logic; no permissions or GUI)
-./scripts/test.sh
 ```
-
-Tests live in `Tests/` and compile against extractable production sources (`LifecycleReconciler`, `SwitcherSession`, `TileLayout`, etc.). When adding logic that can run without AppKit, AX, or WindowServer, keep it in a dedicated type/file and add cases under `Tests/`. App integration (hotkeys, thumbnails, activation) stays manual until we have a harness.
 
 The app requires:
 - **Accessibility permission** — for AX window tracking and `CGEventTap`
 - **Screen Recording permission** — for `SCScreenshotManager` thumbnails
 
 Grant both in System Settings → Privacy & Security when prompted.
+
+## Testing
+
+Lightweight command-line tests — no XCTest, no extra dependencies. The `AltTabTests` target compiles selected production sources plus everything under `Tests/`. Tests run without Accessibility, Screen Recording, or a GUI session.
+
+### How to run
+
+```bash
+./scripts/test.sh
+```
+
+Builds `AltTabTests` into `build/DerivedData` and runs the binary. Success prints `All tests passed` and exits 0; failures print `FAIL <file>:<line>: <message>` and exit 1.
+
+Equivalent manual steps:
+
+```bash
+xcodebuild -project AltTab.xcodeproj -scheme AltTabTests -configuration Debug \
+  -derivedDataPath build/DerivedData build
+build/DerivedData/Build/Products/Debug/AltTabTests
+```
+
+Run `./scripts/test.sh` before shipping changes to testable logic.
+
+### How to write new tests
+
+**1. Make the production code testable.** Put pure logic in a dedicated type or file that does not import AppKit, spawn AX observers, or call WindowServer. Existing examples: `TileLayout`, `LifecycleReconciler`, `SwitcherSession`. If logic is buried in `WindowManager` or `OverlayView`, extract it first.
+
+**2. Add a test file** `Tests/<Name>Tests.swift` with a top-level `test<Name>()` function:
+
+```swift
+func testMyFeature() {
+    runTests("MyFeature") {
+        expect(MyFeature.compute(input: 1) == 2, "describes what must hold")
+        expectEqual(layout.size.width, 120, "CGFloat comparisons use expectEqual")
+    }
+}
+```
+
+Helpers live in `Tests/TestSupport.swift`: `expect`, `expectEqual` (CGFloat, ±0.001), `runTests`. Add `import CoreGraphics` or `import Darwin` in the test file when you use `CGRect`, `pid_t`, etc.
+
+**3. Register the suite** in `Tests/main.swift`:
+
+```swift
+testMyFeature()
+```
+
+**4. Wire the build.** Add the test file to the `AltTabTests` target in `AltTab.xcodeproj/project.pbxproj` (Sources build phase). If the tests call code in a new production file, add that `.swift` file to `AltTabTests` too — not only to `AltTab`. Do not add `AltTab/Sources/Core/main.swift` to the test target.
+
+**What not to unit-test here:** hotkeys (`CGEventTap`, Carbon), AX/KVO window tracking, thumbnail capture, overlay UI, window activation. Those need a manual harness or future integration tests.
 
 ## Coding Style
 
@@ -101,7 +144,7 @@ Grant both in System Settings → Privacy & Security when prompted.
 - `CGSSetSymbolicHotKeyEnabled` state persists after app quit. Always restore it in `applicationWillTerminate` — if we crash without restoring, the user loses native Cmd+Tab entirely.
 - `CGEventTap` requires Accessibility permission. If it returns `nil` from `CGEvent.tapCreate`, the app cannot function — show an alert and exit.
 - Keep the total line count under 1800. If a file grows past 200 lines, it probably needs splitting. If the project grows past 1800 lines total, something is wrong. - Comments don't count against your budget. Tests don't count against your budget. Only real swift code counts against your budget.
-- We need proper testing AND proper commenting to have a maintainable codebase. Run `./scripts/test.sh` before shipping logic changes. New testable production code should live in extractable types (like `TileLayout`, `LifecycleReconciler`) with matching files under `Tests/`.
+- We need proper testing AND proper commenting to have a maintainable codebase. See **Testing** above.
 - Do not leave dead code around. Remove it immediately.
 - Do not create backward compatibility shims.
 - Do not leave code around after refactoring for compatibility of any kind. Rip the band aid off.

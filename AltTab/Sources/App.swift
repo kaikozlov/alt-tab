@@ -19,8 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel = OverlayPanel(contentRect: .zero)
         panel.contentView = overlayView
 
-        // 4. Wire up hotkey callbacks
+        // 4. Wire up hotkey + mouse callbacks
         setupHotkeys()
+        overlayView.onClickedTile = { [weak self] in
+            self?.confirmSelection()
+        }
 
         // 5. Start listening for Cmd+Tab
         Hotkey.shared.start()

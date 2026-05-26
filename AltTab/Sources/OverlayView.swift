@@ -8,10 +8,14 @@ final class OverlayView: NSVisualEffectView {
     private var selectedIndex: Int = 0
     private var windows: [WindowInfo] = []
 
+    /// Called when user clicks a tile. Wired by AppDelegate.
+    var onClickedTile: (() -> Void)?
+
     // Layout constants
     private let interTilePadding: CGFloat = 6
     private let outerPadding: CGFloat = 16
     private let cornerRadius: CGFloat = 14
+    private var trackingArea: NSTrackingArea?
 
     /// Max width of the overlay as a fraction of screen width
     private var maxPanelWidth: CGFloat {
@@ -34,6 +38,47 @@ final class OverlayView: NSVisualEffectView {
         wantsLayer = true
         layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
+    }
+
+    // MARK: - Mouse tracking
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea {
+            removeTrackingArea(existing)
+        }
+        trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let index = tileIndex(at: point) {
+            setSelectedIndex(index)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let index = tileIndex(at: point) {
+            setSelectedIndex(index)
+            onClickedTile?()
+        }
+    }
+
+    /// Returns the tile index at the given point, or nil.
+    private func tileIndex(at point: NSPoint) -> Int? {
+        for (i, tile) in tileViews.enumerated() {
+            if tile.frame.contains(point) {
+                return i
+            }
+        }
+        return nil
     }
 
     // MARK: - Public

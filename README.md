@@ -1,2 +1,5 @@
 # alt-tab
-lightweight alt-tab implementation
+lightweight macos alt-tab
+
+## building?
+`xcodebuild`

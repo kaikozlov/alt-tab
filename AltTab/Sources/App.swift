@@ -76,9 +76,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { return }
 
+        // If sync found new windows, give them a fast thumbnail before first paint.
+        ThumbnailCapture.fillMissingFastSync(windows)
         Hotkey.shared.setPanelOpen(true)
 
-        // Show panel instantly — thumbnails are already cached from background captures
+        // Show panel with cached thumbnails immediately; async refresh may improve them later.
         let initialIndex = windows.count > 1 ? 1 : 0
         overlayView.update(windows: windows, selectedIndex: initialIndex)
         panel.setContentSize(overlayView.frame.size)

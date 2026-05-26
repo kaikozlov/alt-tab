@@ -78,6 +78,18 @@ enum ThumbnailCapture {
         }
     }
 
+    // MARK: - Show-time fast fill
+
+    /// Fill only missing thumbnails synchronously using the fast private capture path.
+    /// This prevents icon-only placeholder tiles if lifecycle sync discovers windows right
+    /// before the overlay opens. SCKit still refreshes asynchronously afterward for
+    /// offscreen/AeroSpace-correct captures.
+    static func fillMissingFastSync(_ windows: [WindowInfo]) {
+        for window in windows where window.thumbnail == nil {
+            window.thumbnail = captureWithPrivateAPI(window.windowId)
+        }
+    }
+
     // MARK: - Bulk capture (refresh all on switcher show)
 
     /// Capture thumbnails for all windows. Completion called on main thread.

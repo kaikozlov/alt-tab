@@ -2,15 +2,24 @@ import Cocoa
 import ApplicationServices
 
 /// Tracks all windows across all running applications using Accessibility APIs.
-/// No polling — uses AX observers for real-time updates.
+/// No polling — uses AX observers + KVO for real-time updates.
 final class WindowManager {
     static let shared = WindowManager()
 
     /// Windows sorted by last-focus order (index 0 = most recently focused).
     private(set) var windows: [WindowInfo] = []
 
+    /// Called on main thread whenever the window list changes (add/remove/reorder).
+    /// Wired by AppDelegate to refresh the switcher panel if it's open.
+    var onChange: (() -> Void)?
+
     /// Per-app AX observers
     private var observers: [pid_t: AXObserver] = [:]
+
+    /// Per-app KVO observations for activationPolicy (to catch apps that aren't ready yet)
+    private var policyObservations: [pid_t: NSKeyValueObservation] = [:]
+
+    /// KVO observation on NSWorkspace.runningApplications
     private var appObservation: NSKeyValueObservation?
 
     private init() {}
@@ -23,21 +32,21 @@ final class WindowManager {
             addApp(app)
         }
 
-        // Observe new launches / quits by diffing old vs new arrays
+        // Observe new launches / quits.
+        // For ordered-to-many KVO, newValue/oldValue contain only the inserted/removed items,
+        // not the full array. This matches how the reference implementation handles it.
         appObservation = NSWorkspace.shared.observe(\.runningApplications, options: [.old, .new]) { [weak self] _, change in
             guard let self else { return }
-            let oldApps = change.oldValue ?? []
-            let newApps = change.newValue ?? []
-            let oldPids = Set(oldApps.map { $0.processIdentifier })
-            let newPids = Set(newApps.map { $0.processIdentifier })
 
-            // Apps that just launched
-            for app in newApps where !oldPids.contains(app.processIdentifier) {
-                self.addApp(app)
+            if let launched = change.newValue {
+                for app in launched {
+                    self.addApp(app)
+                }
             }
-            // Apps that just quit
-            for app in oldApps where !newPids.contains(app.processIdentifier) {
-                self.removeApp(app)
+            if let terminated = change.oldValue {
+                for app in terminated {
+                    self.removeApp(app)
+                }
             }
         }
 
@@ -50,21 +59,29 @@ final class WindowManager {
         return windows
     }
 
-    /// Remove all windows belonging to a pid and clean up its observer.
-    func removeWindows(forPid pid: pid_t) {
-        windows.removeAll { $0.pid == pid }
-        if let observer = observers.removeValue(forKey: pid) {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
-        }
-        reindex()
-    }
-
     // MARK: - App tracking
 
     private func addApp(_ app: NSRunningApplication) {
-        guard app.activationPolicy == .regular else { return }
         let pid = app.processIdentifier
+
+        // Already tracking this app
         guard observers[pid] == nil else { return }
+
+        // App not ready yet — observe activationPolicy and retry when it becomes .regular
+        if app.activationPolicy != .regular {
+            if policyObservations[pid] == nil {
+                policyObservations[pid] = app.observe(\.activationPolicy, options: [.new]) { [weak self] app, _ in
+                    guard let self else { return }
+                    DispatchQueue.main.async {
+                        if app.activationPolicy == .regular {
+                            self.policyObservations.removeValue(forKey: pid)
+                            self.addApp(app)
+                        }
+                    }
+                }
+            }
+            return
+        }
 
         let appName = app.localizedName ?? "Unknown"
         let bundleId = app.bundleIdentifier
@@ -87,7 +104,6 @@ final class WindowManager {
         let appElement = AXUIElementCreateApplication(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
 
-        // Subscribe to notifications
         let notifications = [
             kAXWindowCreatedNotification,
             kAXUIElementDestroyedNotification,
@@ -102,10 +118,27 @@ final class WindowManager {
 
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
 
-        // Enumerate existing windows for this app
+        // Discover existing windows for this app
         discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
 
-        // Capture initial thumbnails for all discovered windows of this app
+        // If no windows found, the app may still be launching. Retry after a short delay.
+        // This handles apps that are slow to create their initial window.
+        if !windows.contains(where: { $0.pid == pid }) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                if !self.windows.contains(where: { $0.pid == pid }) {
+                    self.discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
+                    if self.windows.contains(where: { $0.pid == pid }) {
+                        for win in self.windows where win.pid == pid {
+                            ThumbnailCapture.cacheInBackground(win)
+                        }
+                        self.onChange?()
+                    }
+                }
+            }
+        }
+
+        // Capture initial thumbnails
         for win in windows where win.pid == pid {
             ThumbnailCapture.cacheInBackground(win)
         }
@@ -113,11 +146,19 @@ final class WindowManager {
 
     private func removeApp(_ app: NSRunningApplication) {
         let pid = app.processIdentifier
+        let hadWindows = windows.contains { $0.pid == pid }
+
         windows.removeAll { $0.pid == pid }
+        policyObservations.removeValue(forKey: pid)
+
         if let observer = observers.removeValue(forKey: pid) {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
-        reindex()
+
+        if hadWindows {
+            reindex()
+            onChange?()
+        }
     }
 
     // MARK: - Window discovery
@@ -137,8 +178,6 @@ final class WindowManager {
     private func addWindowIfNew(_ axElement: AXUIElement, pid: pid_t, appName: String, bundleId: String?, icon: NSImage?) -> WindowInfo? {
         guard let wid = windowId(of: axElement) else { return nil }
         guard !windows.contains(where: { $0.windowId == wid }) else { return nil }
-
-        // Filter out non-standard windows
         guard isStandardWindow(axElement) else { return nil }
 
         let title = WindowInfo.bestTitle(axElement: axElement, windowId: wid, appName: appName)
@@ -194,21 +233,24 @@ final class WindowManager {
 
         if let win = addWindowIfNew(element, pid: pid, appName: appName, bundleId: bundleId, icon: icon) {
             ThumbnailCapture.cacheInBackground(win)
+            onChange?()
         }
     }
 
     private func handleWindowDestroyed(_ element: AXUIElement) {
+        let countBefore = windows.count
         if let wid = windowId(of: element) {
             windows.removeAll { $0.windowId == wid }
         } else {
-            // Fallback: AX element might be invalid, try matching by reference
             windows.removeAll { CFEqual($0.axElement, element) }
         }
-        reindex()
+        if windows.count != countBefore {
+            reindex()
+            onChange?()
+        }
     }
 
     private func handleFocusChanged(_ element: AXUIElement) {
-        // The element might be the app or the window — try to get the focused window
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
 
@@ -216,7 +258,6 @@ final class WindowManager {
         if let wid = windowId(of: element), wid != 0 {
             focusedElement = element
         } else {
-            // It's an app element; get its focused window
             var value: AnyObject?
             let appEl = AXUIElementCreateApplication(pid)
             guard AXUIElementCopyAttributeValue(appEl, kAXFocusedWindowAttribute as CFString, &value) == .success else { return }
@@ -226,14 +267,12 @@ final class WindowManager {
         guard let wid = windowId(of: focusedElement) else { return }
 
         if let idx = windows.firstIndex(where: { $0.windowId == wid }) {
-            // Move to front of focus order
             let win = windows.remove(at: idx)
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
             windows.insert(win, at: 0)
             reindex()
             ThumbnailCapture.cacheInBackground(win)
         } else {
-            // New window we hadn't seen — add it at front
             let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
             if let info = addWindowIfNew(focusedElement, pid: pid, appName: app?.localizedName ?? "Unknown",
                                          bundleId: app?.bundleIdentifier, icon: app?.icon) {
@@ -242,6 +281,8 @@ final class WindowManager {
                     windows.insert(w, at: 0)
                     reindex()
                 }
+                ThumbnailCapture.cacheInBackground(info)
+                onChange?()
             }
         }
     }
@@ -270,7 +311,6 @@ final class WindowManager {
 
     private func windowId(of element: AXUIElement) -> CGWindowID? {
         var wid: CGWindowID = 0
-        // _AXUIElementGetWindow is private but stable since 10.5
         guard _AXUIElementGetWindow(element, &wid) == .success, wid != 0 else { return nil }
         return wid
     }
@@ -278,7 +318,7 @@ final class WindowManager {
     private func isStandardWindow(_ element: AXUIElement) -> Bool {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &value) == .success else {
-            return true // If we can't determine subrole, include it
+            return true
         }
         let subrole = value as? String
         return subrole == "AXStandardWindow" || subrole == "AXDialog" || subrole == nil

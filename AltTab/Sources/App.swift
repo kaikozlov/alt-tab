@@ -12,6 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Permissions.ensureGranted()
 
         // 2. Start window tracking
+        WindowManager.shared.onChange = { [weak self] in
+            self?.refreshSwitcherPanel()
+        }
         WindowManager.shared.start()
 
         // 3. Set up the overlay panel (hidden initially)
@@ -122,12 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastQuitPid = window.pid
         }
 
-        // Immediately remove this app's windows from the list and refresh
-        WindowManager.shared.removeWindows(forPid: window.pid)
-        refreshSwitcherPanel()
+        // The KVO observer on runningApplications will fire removeApp(),
+        // which removes windows and calls onChange -> refreshSwitcherPanel()
     }
 
     /// Refresh the switcher panel with current window list, or dismiss if empty.
+    /// Called by WindowManager.onChange whenever windows are added/removed.
     private func refreshSwitcherPanel() {
         guard Hotkey.shared.panelIsOpen else { return }
         let windows = WindowManager.shared.sortedWindows()

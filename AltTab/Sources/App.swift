@@ -94,8 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             Hotkey.shared.setPanelOpen(true)
-            let initialIndex = windows.count > 1 ? 1 : 0
-            self.overlayView.update(windows: windows, selectedIndex: initialIndex)
+            self.overlayView.update(windows: windows, selectedIndex: 0)
             self.panel.setContentSize(self.overlayView.frame.size)
             self.panel.showCentered()
         }

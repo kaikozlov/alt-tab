@@ -18,17 +18,10 @@ Read `ARCHITECTURE.md` for the full design, component breakdown, and activation 
 
 ```
 Sources/
-  main.swift              — Entry point, NSApplication bootstrap
-  App.swift               — App delegate, lifecycle, permission flow
-  Hotkey.swift            — CGEventTap + Carbon hotkey (Cmd+Tab interception)
-  WindowManager.swift     — AX-based window discovery and tracking
-  WindowInfo.swift        — Single window model struct
-  Thumbnail.swift         — On-demand SCScreenshotManager capture
-  OverlayPanel.swift      — NSPanel (floating switcher window)
-  OverlayView.swift       — Tile grid layout and background blur
-  TileView.swift          — Individual tile (thumbnail + icon + title)
-  SkyLight.swift          — Private API declarations (CGS*, SLPS*, etc.)
-  Permissions.swift       — Accessibility + Screen Recording checks
+  Core/                   — App delegate, lifecycle, permissions, switcher state
+  Hotkey/                 — Cmd+Tab interception and private SkyLight declarations
+  Windows/                — AX window discovery, app tracking, focus ordering, models
+  Overlay/                — Panel, layout, tiles, and thumbnail capture
 ```
 
 ## Build & Run

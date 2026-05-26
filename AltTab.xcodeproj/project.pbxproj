@@ -19,6 +19,11 @@
 		A1000001000000000000000A /* OverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000A; };
 		A1000001000000000000000B /* OverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000B; };
 		A1000001000000000000000C /* LifecycleReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000C; };
+		A1000001000000000000000D /* WindowManager+AppTracking.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000D; };
+		A1000001000000000000000E /* WindowManager+WindowDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000E; };
+		A1000001000000000000000F /* TileLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000F; };
+		A10000010000000000000010 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010; };
+		A10000010000000000000011 /* AXHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000011; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +39,11 @@
 		A2000001000000000000000A /* OverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayPanel.swift; sourceTree = "<group>"; };
 		A2000001000000000000000B /* OverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayView.swift; sourceTree = "<group>"; };
 		A2000001000000000000000C /* LifecycleReconciler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleReconciler.swift; sourceTree = "<group>"; };
+		A2000001000000000000000D /* WindowManager+AppTracking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowManager+AppTracking.swift"; sourceTree = "<group>"; };
+		A2000001000000000000000E /* WindowManager+WindowDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowManager+WindowDiscovery.swift"; sourceTree = "<group>"; };
+		A2000001000000000000000F /* TileLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TileLayout.swift; sourceTree = "<group>"; };
+		A20000010000000000000010 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
+		A20000010000000000000011 /* AXHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXHelpers.swift; sourceTree = "<group>"; };
 		A30000010000000000000001 /* AltTab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AltTab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000010000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A30000010000000000000003 /* AltTab.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AltTab.entitlements; sourceTree = "<group>"; };
@@ -71,18 +81,10 @@
 		A50000010000000000000003 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				A20000010000000000000001 /* main.swift */,
-				A20000010000000000000002 /* App.swift */,
-				A20000010000000000000003 /* SkyLight.swift */,
-				A20000010000000000000004 /* Permissions.swift */,
-				A20000010000000000000005 /* WindowInfo.swift */,
-				A20000010000000000000006 /* WindowManager.swift */,
-				A20000010000000000000007 /* Thumbnail.swift */,
-				A20000010000000000000008 /* Hotkey.swift */,
-				A20000010000000000000009 /* TileView.swift */,
-				A2000001000000000000000A /* OverlayPanel.swift */,
-				A2000001000000000000000B /* OverlayView.swift */,
-				A2000001000000000000000C /* LifecycleReconciler.swift */,
+				A50000010000000000000005 /* Core */,
+				A50000010000000000000006 /* Hotkey */,
+				A50000010000000000000007 /* Windows */,
+				A50000010000000000000008 /* Overlay */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -93,6 +95,51 @@
 				A30000010000000000000001 /* AltTab.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A50000010000000000000005 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000001 /* main.swift */,
+				A20000010000000000000002 /* App.swift */,
+				A20000010000000000000010 /* SwitcherSession.swift */,
+				A20000010000000000000004 /* Permissions.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		A50000010000000000000006 /* Hotkey */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000008 /* Hotkey.swift */,
+				A20000010000000000000003 /* SkyLight.swift */,
+			);
+			path = Hotkey;
+			sourceTree = "<group>";
+		};
+		A50000010000000000000007 /* Windows */ = {
+			isa = PBXGroup;
+			children = (
+				A20000010000000000000011 /* AXHelpers.swift */,
+				A20000010000000000000005 /* WindowInfo.swift */,
+				A20000010000000000000006 /* WindowManager.swift */,
+				A2000001000000000000000D /* WindowManager+AppTracking.swift */,
+				A2000001000000000000000E /* WindowManager+WindowDiscovery.swift */,
+				A2000001000000000000000C /* LifecycleReconciler.swift */,
+			);
+			path = Windows;
+			sourceTree = "<group>";
+		};
+		A50000010000000000000008 /* Overlay */ = {
+			isa = PBXGroup;
+			children = (
+				A2000001000000000000000A /* OverlayPanel.swift */,
+				A2000001000000000000000B /* OverlayView.swift */,
+				A2000001000000000000000F /* TileLayout.swift */,
+				A20000010000000000000009 /* TileView.swift */,
+				A20000010000000000000007 /* Thumbnail.swift */,
+			);
+			path = Overlay;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -149,16 +196,21 @@
 			files = (
 				A10000010000000000000001 /* main.swift in Sources */,
 				A10000010000000000000002 /* App.swift in Sources */,
-				A10000010000000000000003 /* SkyLight.swift in Sources */,
+				A10000010000000000000010 /* SwitcherSession.swift in Sources */,
 				A10000010000000000000004 /* Permissions.swift in Sources */,
+				A10000010000000000000008 /* Hotkey.swift in Sources */,
+				A10000010000000000000003 /* SkyLight.swift in Sources */,
+				A10000010000000000000011 /* AXHelpers.swift in Sources */,
 				A10000010000000000000005 /* WindowInfo.swift in Sources */,
 				A10000010000000000000006 /* WindowManager.swift in Sources */,
-				A10000010000000000000007 /* Thumbnail.swift in Sources */,
-				A10000010000000000000008 /* Hotkey.swift in Sources */,
-				A10000010000000000000009 /* TileView.swift in Sources */,
+				A1000001000000000000000D /* WindowManager+AppTracking.swift in Sources */,
+				A1000001000000000000000E /* WindowManager+WindowDiscovery.swift in Sources */,
+				A1000001000000000000000C /* LifecycleReconciler.swift in Sources */,
 				A1000001000000000000000A /* OverlayPanel.swift in Sources */,
 				A1000001000000000000000B /* OverlayView.swift in Sources */,
-				A1000001000000000000000C /* LifecycleReconciler.swift in Sources */,
+				A1000001000000000000000F /* TileLayout.swift in Sources */,
+				A10000010000000000000009 /* TileView.swift in Sources */,
+				A10000010000000000000007 /* Thumbnail.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

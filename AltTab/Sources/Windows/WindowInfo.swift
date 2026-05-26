@@ -42,7 +42,7 @@ final class WindowInfo {
         WindowInfo.commandQueue.async {
             var value: AnyObject?
             let error = AXUIElementCopyAttributeValue(self.axElement, kAXCloseButtonAttribute as CFString, &value)
-            let button = value as! AXUIElement?
+            let button = safeAXElement(from: value)
             let pressed = error == .success && button.map {
                 AXUIElementPerformAction($0, kAXPressAction as CFString) == .success
             } == true

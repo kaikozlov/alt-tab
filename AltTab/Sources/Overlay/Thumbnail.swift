@@ -125,9 +125,10 @@ enum ThumbnailCapture {
 
     private static func captureWithPrivateAPI(_ wid: CGWindowID) -> CGImage? {
         var windowId = wid
-        let list = CGSHWCaptureWindowList(CGS_CONNECTION, &windowId, 1,
-                                          [.ignoreGlobalClipShape, .bestResolution, .fullSize])
-            .takeRetainedValue() as! [CGImage]
+        let value = CGSHWCaptureWindowList(CGS_CONNECTION, &windowId, 1,
+                                           [.ignoreGlobalClipShape, .bestResolution, .fullSize])
+            .takeRetainedValue()
+        guard let list = value as? [CGImage] else { return nil }
         return list.first
     }
 

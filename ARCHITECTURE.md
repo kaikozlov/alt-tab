@@ -116,20 +116,17 @@ The reference uses private SkyLight APIs for reliable window activation:
 
 ```
 Sources/
-  main.swift              — Entry point, NSApplication setup
-  App.swift               — App delegate, lifecycle, permission checks
-  Hotkey.swift            — CGEventTap + Carbon hotkey registration
-  WindowManager.swift     — Window discovery via AX, maintains window list
-  WindowInfo.swift        — Single window model (wid, title, icon, thumbnail, app)
-  Thumbnail.swift         — SCScreenshotManager capture (on-demand only)
-  OverlayPanel.swift      — NSPanel (the floating switcher window)
-  OverlayView.swift       — Layout + drawing of window tiles
-  TileView.swift          — Individual tile (thumbnail + icon + title)
-  SkyLight.swift          — Private API declarations (CGS*, SLPs*, etc.)
-  Permissions.swift       — AX + Screen Recording permission checks
+  Core/
+    main.swift, App.swift, Permissions.swift, SwitcherSession.swift
+  Hotkey/
+    Hotkey.swift, SkyLight.swift
+  Windows/
+    WindowInfo.swift, WindowManager*.swift, AXHelpers.swift, LifecycleReconciler.swift
+  Overlay/
+    OverlayPanel.swift, OverlayView.swift, TileLayout.swift, TileView.swift, Thumbnail.swift
 ```
 
-~11 files. No `preferences/`, no `pro/`, no `vendors/`, no `events/` sprawl.
+Feature folders group files that change together while keeping each Swift file under ~200 lines.
 
 ### Component design
 
@@ -152,7 +149,7 @@ Escape        → local monitor → dismiss without switching
 Cmd up        → CGEventTap flagsChanged → focus selected window, hide panel
 ```
 
-#### WindowManager (WindowManager.swift + WindowInfo.swift)
+#### Window tracking (Windows/)
 
 Tracks all windows using the Accessibility API:
 
@@ -288,15 +285,10 @@ Actually — since we need a proper `.app` bundle with `Info.plist`, entitlement
 
 | File | Lines (est.) |
 |---|---|
-| main.swift | 20 |
-| App.swift | 100 |
-| Hotkey.swift | 120 |
-| WindowManager.swift | 200 |
-| WindowInfo.swift | 40 |
-| Thumbnail.swift | 80 |
-| OverlayPanel.swift | 60 |
-| OverlayView.swift | 200 |
-| TileView.swift | 120 |
-| SkyLight.swift | 40 |
-| Permissions.swift | 60 |
-| **Total** | **~1040** |
+| Area | Lines (target) |
+|---|---:|
+| Core | ~250 |
+| Hotkey | ~220 |
+| Windows | ~500 |
+| Overlay | ~500 |
+| **Total source** | **≤1500** |

@@ -13,6 +13,10 @@ final class WindowManager {
     /// Wired by AppDelegate to refresh the switcher panel if it's open.
     var onChange: (() -> Void)?
 
+    /// Tracked app identities. Removals use NSRunningApplication.isEqual like the reference;
+    /// pid can be unreliable once an app is terminating.
+    private var trackedApps: [pid_t: NSRunningApplication] = [:]
+
     /// Per-app AX observers
     private var observers: [pid_t: AXObserver] = [:]
 
@@ -59,13 +63,51 @@ final class WindowManager {
         return windows
     }
 
+    /// Reference-style manual sync before showing the panel: remove dead apps/windows,
+    /// add any running apps KVO missed, then query each tracked app for missing windows.
+    func syncWithRunningApplications() {
+        let runningApps = NSWorkspace.shared.runningApplications
+        let runningPids = Set(runningApps.map { $0.processIdentifier })
+        var changed = false
+
+        for app in runningApps {
+            addApp(app)
+        }
+
+        changed = removeZombieWindows() || changed
+
+        let staleByIdentity = trackedApps.filter { _, tracked in
+            !runningApps.contains { $0.isEqual(tracked) }
+        }.map(\.key)
+        let staleByPid = LifecycleReconciler.staleWindowPids(windowPids: windows.map(\.pid), runningPids: runningPids)
+        for pid in Set(staleByIdentity).union(staleByPid) {
+            changed = removeTrackedApp(pid, notify: false) || changed
+        }
+
+        for (pid, app) in trackedApps where app.activationPolicy == .regular {
+            let before = windows.count
+            discoverWindows(pid: pid, appName: app.localizedName ?? "Unknown", bundleId: app.bundleIdentifier, icon: app.icon)
+            if windows.count != before {
+                for win in windows where win.pid == pid {
+                    ThumbnailCapture.cacheInBackground(win)
+                }
+                changed = true
+            }
+        }
+
+        if changed {
+            reindex()
+            onChange?()
+        }
+    }
+
     // MARK: - App tracking
 
     private func addApp(_ app: NSRunningApplication) {
         let pid = app.processIdentifier
 
         // Already tracking this app
-        guard observers[pid] == nil else { return }
+        guard trackedApps[pid] == nil else { return }
 
         // App not ready yet — observe activationPolicy and retry when it becomes .regular
         if app.activationPolicy != .regular {
@@ -83,6 +125,8 @@ final class WindowManager {
             return
         }
 
+        trackedApps[pid] = app
+
         let appName = app.localizedName ?? "Unknown"
         let bundleId = app.bundleIdentifier
         let icon = app.icon
@@ -98,25 +142,24 @@ final class WindowManager {
             }
         }
 
-        guard AXObserverCreate(pid, callback, &observer) == .success, let observer else { return }
-        observers[pid] = observer
-
         let appElement = AXUIElementCreateApplication(pid)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
 
-        let notifications = [
-            kAXWindowCreatedNotification,
-            kAXUIElementDestroyedNotification,
-            kAXFocusedWindowChangedNotification,
-            kAXApplicationActivatedNotification,
-            kAXWindowMiniaturizedNotification,
-            kAXWindowDeminiaturizedNotification,
-        ]
-        for notif in notifications {
-            AXObserverAddNotification(observer, appElement, notif as CFString, refcon)
+        if AXObserverCreate(pid, callback, &observer) == .success, let observer {
+            observers[pid] = observer
+            let notifications = [
+                kAXWindowCreatedNotification,
+                kAXUIElementDestroyedNotification,
+                kAXFocusedWindowChangedNotification,
+                kAXApplicationActivatedNotification,
+                kAXWindowMiniaturizedNotification,
+                kAXWindowDeminiaturizedNotification,
+            ]
+            for notif in notifications {
+                AXObserverAddNotification(observer, appElement, notif as CFString, refcon)
+            }
+            CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
-
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
 
         // Discover existing windows for this app
         discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
@@ -145,20 +188,53 @@ final class WindowManager {
     }
 
     private func removeApp(_ app: NSRunningApplication) {
-        let pid = app.processIdentifier
-        let hadWindows = windows.contains { $0.pid == pid }
+        let matchingPids = trackedApps.filter { _, tracked in tracked.isEqual(app) }.map(\.key)
+        var changed = false
+        for pid in matchingPids {
+            changed = removeTrackedApp(pid, notify: false) || changed
+        }
 
-        windows.removeAll { $0.pid == pid }
+        // Fallback for apps we observed before they became regular.
+        let pid = app.processIdentifier
+        if policyObservations[pid] != nil {
+            policyObservations.removeValue(forKey: pid)
+        }
+
+        if changed {
+            reindex()
+            onChange?()
+        }
+    }
+
+    @discardableResult
+    private func removeTrackedApp(_ pid: pid_t, notify: Bool) -> Bool {
+        let hadWindows = windows.contains { $0.pid == pid }
+        let wasTracked = trackedApps.removeValue(forKey: pid) != nil
         policyObservations.removeValue(forKey: pid)
+        windows.removeAll { $0.pid == pid }
 
         if let observer = observers.removeValue(forKey: pid) {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
 
-        if hadWindows {
+        let changed = hadWindows || wasTracked
+        if changed && notify {
             reindex()
             onChange?()
         }
+        return changed
+    }
+
+    /// Reference-style GC: AX can miss destroyed-window notifications, so verify our
+    /// tracked CGWindowIDs still exist in WindowServer before showing the panel.
+    private func removeZombieWindows() -> Bool {
+        let ids = windows.map { $0.windowId }
+        guard !ids.isEmpty else { return false }
+        let descriptions = CGWindowListCreateDescriptionFromArray(ids as CFArray) as? [[CFString: Any]]
+        let existing = Set(descriptions?.compactMap { $0[kCGWindowNumber] as? CGWindowID } ?? [])
+        let before = windows.count
+        windows.removeAll { !existing.contains($0.windowId) }
+        return windows.count != before
     }
 
     // MARK: - Window discovery

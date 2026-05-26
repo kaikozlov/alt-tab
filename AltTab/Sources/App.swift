@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Switcher lifecycle
 
     private func showSwitcher() {
+        WindowManager.shared.syncWithRunningApplications()
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { return }
 

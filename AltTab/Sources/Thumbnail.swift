@@ -1,9 +1,11 @@
 import Cocoa
 import ScreenCaptureKit
 
-/// On-demand thumbnail capture. No caching, no background refresh.
+/// On-demand thumbnail capture. No caching between overlay sessions.
 ///
 /// Cmd+Tab captures the current window list, then the overlay is shown once thumbnails are ready.
+/// While the overlay is visible, thumbnails stay on WindowInfo so refreshes after W/Q don't
+/// degrade surviving tiles to app icons. Dismissal releases them.
 /// SCKit is the primary path because `desktopIndependentWindow` captures full content for
 /// offscreen/AeroSpace-managed windows. Private CGSHWCaptureWindowList is only a fallback.
 enum ThumbnailCapture {
@@ -11,20 +13,28 @@ enum ThumbnailCapture {
     private static let captureQueue = DispatchQueue(label: "dev.kai.AltTab.capture", attributes: .concurrent)
 
     /// Capture thumbnails for all windows, then call completion on main thread.
+    /// Does not clear existing thumbnails; callers decide when a fresh session should release.
     static func captureAll(_ windows: [WindowInfo], completion: @escaping () -> Void) {
-        guard !windows.isEmpty else { completion(); return }
-        releaseAll(windows)
+        capture(windows, completion: completion)
+    }
 
+    /// Capture only windows that don't currently have a thumbnail.
+    static func captureMissing(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+        capture(windows.filter { $0.thumbnail == nil }, completion: completion)
+    }
+
+    /// Release thumbnails. Called before a new overlay session and when the panel closes.
+    static func releaseAll(_ windows: [WindowInfo]) {
+        for window in windows { window.thumbnail = nil }
+    }
+
+    private static func capture(_ windows: [WindowInfo], completion: @escaping () -> Void) {
+        guard !windows.isEmpty else { completion(); return }
         if #available(macOS 14.0, *) {
             captureAllWithSCKit(windows, completion: completion)
         } else {
             captureAllWithPrivateAPI(windows, completion: completion)
         }
-    }
-
-    /// Release thumbnails. Called before each fresh capture and when the panel closes.
-    static func releaseAll(_ windows: [WindowInfo]) {
-        for window in windows { window.thumbnail = nil }
     }
 
     // MARK: - SCKit primary path

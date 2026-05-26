@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayView: OverlayView!
     private var statusItem: NSStatusItem?
     private var isPreparingSwitcher = false
+    private var isRefreshingSwitcher = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Check permissions
@@ -82,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { return }
 
+        ThumbnailCapture.releaseAll(windows)
         isPreparingSwitcher = true
         ThumbnailCapture.captureAll(windows) { [weak self] in
             guard let self else { return }
@@ -152,12 +154,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Refresh the switcher panel with current window list, or dismiss if empty.
     /// Called by WindowManager.onChange whenever windows are added/removed.
     private func refreshSwitcherPanel() {
-        guard Hotkey.shared.panelIsOpen else { return }
+        guard Hotkey.shared.panelIsOpen, !isRefreshingSwitcher else { return }
         let windows = WindowManager.shared.sortedWindows()
         if windows.isEmpty {
             dismissSwitcher()
+            return
+        }
+
+        let idx = min(overlayView.getSelectedIndex(), windows.count - 1)
+        if windows.contains(where: { $0.thumbnail == nil }) {
+            isRefreshingSwitcher = true
+            ThumbnailCapture.captureMissing(windows) { [weak self] in
+                guard let self else { return }
+                self.isRefreshingSwitcher = false
+                guard Hotkey.shared.panelIsOpen else { return }
+                self.overlayView.update(windows: windows, selectedIndex: idx)
+                self.panel.setContentSize(self.overlayView.frame.size)
+                self.panel.showCentered()
+            }
         } else {
-            let idx = min(overlayView.getSelectedIndex(), windows.count - 1)
             overlayView.update(windows: windows, selectedIndex: idx)
             panel.setContentSize(overlayView.frame.size)
             panel.showCentered()

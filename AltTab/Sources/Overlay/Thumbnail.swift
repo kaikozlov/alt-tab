@@ -23,7 +23,7 @@ enum ThumbnailCapture {
     @MainActor
     static func refreshAsync(_ windows: [WindowInfo], source: Source = .externalEvent, prioritizedIds: Set<CGWindowID>? = nil) {
         guard captureInBackground || switcherIsActive() else { return }
-        let eligible = windows.filter { $0.windowId != 0 && $0.thumbnail == nil }
+        let eligible = windows.filter { $0.windowId != 0 }
         guard !eligible.isEmpty else { return }
         let prioritized = prioritizedIds ?? []
         let sorted = eligible.sorted { prioritized.contains($0.windowId) && !prioritized.contains($1.windowId) }

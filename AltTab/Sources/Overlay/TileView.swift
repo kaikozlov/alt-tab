@@ -82,7 +82,7 @@ final class TileView: NSView {
     ]
 
     private func setupThumbnail() {
-        thumbnailLayer.contentsGravity = .resizeAspect
+        thumbnailLayer.contentsGravity = .resize
         thumbnailLayer.cornerRadius = 6
         thumbnailLayer.masksToBounds = true
         thumbnailLayer.borderWidth = 0.5

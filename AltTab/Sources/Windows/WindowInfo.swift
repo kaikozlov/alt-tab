@@ -87,6 +87,7 @@ final class WindowInfo: @unchecked Sendable {
         let size = WindowInfo.contentSize(axElement: axElement, windowId: windowId)
         guard size != contentSize else { return false }
         contentSize = size
+        thumbnail = nil
         return true
     }
 

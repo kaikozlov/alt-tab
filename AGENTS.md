@@ -6,6 +6,14 @@ A minimal, zero-dependency macOS window switcher. Replaces Cmd+Tab with a thumbn
 
 Read `ARCHITECTURE.md` for the full design, component breakdown, and activation flow.
 
+# macOS development
+- Don't use xcode directly to develop
+- Use pure swift code to make the app. No interface builder. No SwiftUI.
+- Aim for compact code. Within methods, don't have groups of statements separated with newlines. No inline comments for simple code. Instead, split statements into sub-methods.
+- Use guard closes as much as possible to separate the happy-path under them
+- Organize source files into folders. Folders should group files that change together, at the same pace (e.g. one feature)
+- Favor low latency and responsiveness. Reuse objects, avoid wasting memory or I/O.
+
 ## Project Structure
 
 ```
@@ -23,11 +31,9 @@ Sources/
   Permissions.swift       — Accessibility + Screen Recording checks
 ```
 
-No `preferences/`, no `pro/`, no `vendors/`, no analytics, no auto-updater.
-
 ## Build & Run
 
-This is an Xcode project (not SPM-only) because we need a proper `.app` bundle with `Info.plist`, entitlements, and code signing for `CGEventTap` + private APIs.
+This is an Xcode project because we need a proper `.app` bundle with `Info.plist`, entitlements, and code signing for `CGEventTap` + private APIs.
 
 ```bash
 # Build and run from Xcode
@@ -93,16 +99,8 @@ Grant both in System Settings → Privacy & Security when prompted.
 - `SLPSPostEventRecordTo(&psn, &bytes)` — make window key (Hammerspoon technique)
 - Fallback: `AXUIElement.performAction(kAXRaiseAction)`
 
-## Testing
-
-This is a system-level utility that's hard to unit test meaningfully (most logic touches CGEventTap, AX APIs, private frameworks). Testing approach:
-
-- **Manual testing**: Build, run, verify Cmd+Tab works, windows cycle, thumbnails appear, focus switches correctly.
-- **Edge cases to verify**: minimized windows, fullscreen windows, windows on other spaces, apps with no windows, many windows (20+).
-
 ## Agent Notes
 
-- The `REFERENCE/` directory contains `alt-tab-macos` (the reference implementation we're replacing). Never edit files in `REFERENCE/`.
 - When adding private API declarations to `SkyLight.swift`, include a comment noting the macOS version range and what the function does.
 - The overlay must never become the key window of the frontmost app — use `.nonactivatingPanel` and never call `NSApp.activate()` while the panel is visible.
 - `CGSSetSymbolicHotKeyEnabled` state persists after app quit. Always restore it in `applicationWillTerminate` — if we crash without restoring, the user loses native Cmd+Tab entirely.

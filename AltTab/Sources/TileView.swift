@@ -15,17 +15,18 @@ final class TileView: NSView {
     }
 
     // Layout constants — height is fixed, width varies with aspect ratio
-    static let thumbnailHeight: CGFloat = 130
-    static let minThumbnailWidth: CGFloat = 100
-    static let maxThumbnailWidth: CGFloat = 280
-    static let iconSize: CGFloat = 20
-    static let titleHeight: CGFloat = 18
-    static let padding: CGFloat = 8
+    static let thumbnailHeight: CGFloat = 170
+    static let minThumbnailWidth: CGFloat = 130
+    static let maxThumbnailWidth: CGFloat = 360
+    static let iconSize: CGFloat = 26
+    static let titleHeight: CGFloat = 22
+    static let padding: CGFloat = 12
+    static let titleGap: CGFloat = 8
     static let cornerRadius: CGFloat = 10
 
     /// Fixed height for all tiles
     static var tileHeight: CGFloat {
-        padding + thumbnailHeight + 6 + iconSize + 2 + titleHeight + padding
+        padding + thumbnailHeight + titleGap + max(iconSize, titleHeight) + padding
     }
 
     /// Compute tile width from a thumbnail's aspect ratio.
@@ -86,7 +87,7 @@ final class TileView: NSView {
         addSubview(iconView)
 
         // Title
-        titleLabel.font = NSFont.systemFont(ofSize: 11)
+        titleLabel.font = NSFont.systemFont(ofSize: 14)
         titleLabel.textColor = .labelColor
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
@@ -131,12 +132,13 @@ final class TileView: NSView {
         let thumbH = TileView.thumbnailHeight
         thumbnailLayer.frame = CGRect(x: p, y: p, width: thumbW, height: thumbH)
 
-        let iconY = p + thumbH + 6
+        let iconY = p + thumbH + TileView.titleGap
         iconView.frame = CGRect(x: p, y: iconY, width: TileView.iconSize, height: TileView.iconSize)
 
-        let labelX = p + TileView.iconSize + 4
+        let labelX = p + TileView.iconSize + 6
         let labelW = w - labelX - p
-        titleLabel.frame = CGRect(x: labelX, y: iconY + 1, width: labelW, height: TileView.titleHeight)
+        let labelY = iconY + (TileView.iconSize - TileView.titleHeight) / 2
+        titleLabel.frame = CGRect(x: labelX, y: labelY, width: labelW, height: TileView.titleHeight)
 
         CATransaction.commit()
     }

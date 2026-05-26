@@ -55,6 +55,8 @@ extension WindowManager {
     private func handleFocusChanged(_ element: AXUIElement) {
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
+        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }),
+              app.isActive else { return }
         let focusedElement: AXUIElement
         if let wid = windowId(of: element), wid != 0 {
             focusedElement = element
@@ -69,19 +71,17 @@ extension WindowManager {
         if let idx = windows.firstIndex(where: { $0.windowId == wid }) {
             let win = windows[idx]
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
-            if moveToFront(windowId: wid) { onChange?() }
-        } else {
-            let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
-            if let info = addWindowIfNew(focusedElement, pid: pid, appName: app?.localizedName ?? "Unknown",
-                                         bundleId: app?.bundleIdentifier, icon: app?.icon) {
-                if let idx = windows.firstIndex(where: { $0.windowId == info.windowId }) {
-                    let w = windows.remove(at: idx)
-                    windows.insert(w, at: 0)
-                    reindex()
-                }
-                onChange?()
-            }
+            notifyFocusChangeIfNeeded(updateLastFocusOrder(windowId: wid))
+        } else if addWindowIfNew(focusedElement, pid: pid, appName: app.localizedName ?? "Unknown",
+                                 bundleId: app.bundleIdentifier, icon: app.icon) != nil {
+            _ = updateLastFocusOrder(windowId: wid)
+            notifyFocusChangeIfNeeded(true)
         }
+    }
+
+    private func notifyFocusChangeIfNeeded(_ changed: Bool) {
+        guard changed, suppressFocusRefresh?() != true else { return }
+        onChange?()
     }
 
     @discardableResult
@@ -94,11 +94,11 @@ extension WindowManager {
               let axEl = safeAXElement(from: value),
               let wid = windowId(of: axEl) else { return false }
         if windows.contains(where: { $0.windowId == wid }) {
-            return moveToFront(windowId: wid)
+            return updateLastFocusOrder(windowId: wid)
         }
         if addWindowIfNew(axEl, pid: pid, appName: app.localizedName ?? "Unknown",
                           bundleId: app.bundleIdentifier, icon: app.icon) != nil {
-            return moveToFront(windowId: wid)
+            return updateLastFocusOrder(windowId: wid)
         }
         return false
     }

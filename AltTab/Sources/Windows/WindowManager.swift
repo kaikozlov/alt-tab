@@ -15,6 +15,8 @@ final class WindowManager {
 
     var policyObservations: [pid_t: NSKeyValueObservation] = [:]
 
+    var suppressFocusRefresh: (() -> Bool)?
+
     private var appObservation: NSKeyValueObservation?
 
     private init() {}
@@ -40,7 +42,7 @@ final class WindowManager {
     }
 
     func sortedWindows() -> [WindowInfo] {
-        return windows
+        return windows.sorted { $0.lastFocusOrder < $1.lastFocusOrder }
     }
 
     func syncWithRunningApplications() {
@@ -63,7 +65,7 @@ final class WindowManager {
         }
         let focusChanged = syncFocusedWindowFromSystem()
         if changed || focusChanged {
-            reindex()
+            sortByFocusOrder()
             onChange?()
         }
     }
@@ -74,6 +76,23 @@ final class WindowManager {
     }
 
     // MARK: - Ordering
+
+    @discardableResult
+    func updateLastFocusOrder(windowId: CGWindowID) -> Bool {
+        guard let focused = windows.first(where: { $0.windowId == windowId }) else { return false }
+        guard focused.lastFocusOrder != 0, windows.count > 1 else { return false }
+        let oldOrder = focused.lastFocusOrder
+        for win in windows {
+            if win.lastFocusOrder == oldOrder { win.lastFocusOrder = 0 }
+            else if win.lastFocusOrder < oldOrder { win.lastFocusOrder += 1 }
+        }
+        return true
+    }
+
+    func sortByFocusOrder() {
+        windows.sort { $0.lastFocusOrder < $1.lastFocusOrder }
+        reindex()
+    }
 
     @discardableResult
     func moveToFront(windowId: CGWindowID) -> Bool {

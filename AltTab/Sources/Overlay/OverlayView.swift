@@ -60,6 +60,9 @@ final class OverlayView: NSVisualEffectView {
     // MARK: - Public
 
     func update(windows: [WindowInfo], selectedIndex: Int) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         self.windows = windows
         self.selectedIndex = selectedIndex
         resizeTilePool(to: windows.count)

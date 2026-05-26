@@ -24,6 +24,7 @@
 		A1000001000000000000000F /* TileLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000F; };
 		A10000010000000000000010 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010; };
 		A10000010000000000000011 /* AXHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000011; };
+		A10000010000000000000012 /* Throttler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000012; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 		A2000001000000000000000F /* TileLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TileLayout.swift; sourceTree = "<group>"; };
 		A20000010000000000000010 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
 		A20000010000000000000011 /* AXHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXHelpers.swift; sourceTree = "<group>"; };
+		A20000010000000000000012 /* Throttler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Throttler.swift; sourceTree = "<group>"; };
 		A30000010000000000000001 /* AltTab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AltTab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000010000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A30000010000000000000003 /* AltTab.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AltTab.entitlements; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 				A20000010000000000000001 /* main.swift */,
 				A20000010000000000000002 /* App.swift */,
 				A20000010000000000000010 /* SwitcherSession.swift */,
+				A20000010000000000000012 /* Throttler.swift */,
 				A20000010000000000000004 /* Permissions.swift */,
 			);
 			path = Core;
@@ -197,6 +200,7 @@
 				A10000010000000000000001 /* main.swift in Sources */,
 				A10000010000000000000002 /* App.swift in Sources */,
 				A10000010000000000000010 /* SwitcherSession.swift in Sources */,
+				A10000010000000000000012 /* Throttler.swift in Sources */,
 				A10000010000000000000004 /* Permissions.swift in Sources */,
 				A10000010000000000000008 /* Hotkey.swift in Sources */,
 				A10000010000000000000003 /* SkyLight.swift in Sources */,

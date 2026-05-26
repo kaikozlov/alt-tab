@@ -96,7 +96,10 @@ extension WindowManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self, !self.windows.contains(where: { $0.pid == pid }) else { return }
             self.discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
-            if self.windows.contains(where: { $0.pid == pid }) { self.onChange?() }
+            let added = self.windows.filter { $0.pid == pid }
+            guard !added.isEmpty else { return }
+            self.refreshThumbnails?(added)
+            self.onChange?()
         }
     }
 }

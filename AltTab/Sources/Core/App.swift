@@ -16,6 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshPanelThrottler.throttleOrProceed { self?.refreshSwitcherPanel() }
         }
         WindowManager.shared.suppressFocusRefresh = { [weak self] in self?.session.isSwitching == true }
+        WindowManager.shared.refreshThumbnails = { ThumbnailCapture.refreshAsync($0) }
+        ThumbnailCapture.switcherIsActive = { [weak self] in self?.session.isSwitching == true }
+        ThumbnailCapture.onThumbnailUpdated = { [weak self] windowId in
+            guard Hotkey.shared.panelIsOpen else { return }
+            self?.overlayView.refreshThumbnail(for: windowId)
+        }
         WindowManager.shared.start()
         overlayView = OverlayView(frame: .zero)
         panel = OverlayPanel(contentRect: .zero)
@@ -24,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayView.onClickedTile = { [weak self] in self?.confirmSelection() }
         Hotkey.shared.start()
         setupStatusItem()
+        ThumbnailCapture.refreshAsync(WindowManager.shared.sortedWindows())
         NSLog("[AltTab] Ready — Cmd+Tab to switch windows")
     }
 
@@ -52,16 +59,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let index = initialSelectedIndex(for: windows)
         guard !windows.isEmpty, session.beginSwitching(selectedIndex: index) else { return }
         switcherWindows = windows
-        ThumbnailCapture.releaseAll(windows)
-        let generation = session.generation
-        ThumbnailCapture.captureAll(windows) { [weak self] in
-            guard let self else { return }
-            self.session.endPreparing()
-            guard self.session.isSwitching, self.session.generation == generation else { ThumbnailCapture.releaseAll(windows); return }
-            guard NSEvent.modifierFlags.contains(.command) else { self.confirmSelection(); return }
-            self.updatePanel(windows: self.switcherWindows, selectedIndex: self.session.selectedIndex)
-            Hotkey.shared.setPanelOpen(true)
-        }
+        guard NSEvent.modifierFlags.contains(.command) else { confirmSelection(); return }
+        buildUiAndShowPanel()
+    }
+
+    private func buildUiAndShowPanel() {
+        guard session.isSwitching else { return }
+        updatePanel(windows: switcherWindows, selectedIndex: session.selectedIndex)
+        Hotkey.shared.setPanelOpen(true)
+        ThumbnailCapture.refreshAsync(switcherWindows, source: .afterShowUi, prioritizedIds: prioritizedWindowIds())
     }
 
     private func cycleSwitcher(_ step: Int) {
@@ -78,7 +84,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissSwitcher() {
         panel.dismiss()
         Hotkey.shared.setPanelOpen(false)
-        ThumbnailCapture.releaseAll(switcherWindows.isEmpty ? WindowManager.shared.sortedWindows() : switcherWindows)
         switcherWindows.removeAll()
         session.endSwitching()
     }
@@ -109,11 +114,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let selectedIndex = selectedId.flatMap { id in windows.firstIndex(where: { $0.windowId == id }) }
             ?? min(overlayView.getSelectedIndex(), windows.count - 1)
         session.setSelectedIndex(selectedIndex, count: windows.count)
-        if windows.contains(where: { $0.thumbnail == nil }) {
-            refreshPanelAfterCapturingMissing(windows: windows, selectedIndex: session.selectedIndex)
-        } else {
-            updatePanel(windows: windows, selectedIndex: session.selectedIndex)
+        updatePanel(windows: windows, selectedIndex: session.selectedIndex)
+        ThumbnailCapture.refreshAsync(windows, source: .afterShowUi, prioritizedIds: prioritizedWindowIds())
+    }
+
+    private func prioritizedWindowIds() -> Set<CGWindowID> {
+        var ids = Set<CGWindowID>()
+        for offset in [0, 1, -1, 2, -2] {
+            let index = session.selectedIndex + offset
+            guard switcherWindows.indices.contains(index) else { continue }
+            ids.insert(switcherWindows[index].windowId)
         }
+        return ids
     }
 
     private func selectedSwitcherWindowId() -> CGWindowID? {
@@ -128,17 +140,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let known = Set(merged.map(\.windowId))
         merged.append(contentsOf: managerWindows.filter { !known.contains($0.windowId) })
         return merged
-    }
-
-    private func refreshPanelAfterCapturingMissing(windows: [WindowInfo], selectedIndex: Int) {
-        guard session.beginRefreshing() else { return }
-        let generation = session.generation
-        ThumbnailCapture.captureMissing(windows) { [weak self] in
-            guard let self else { return }
-            self.session.endRefreshing()
-            guard Hotkey.shared.panelIsOpen, self.session.generation == generation else { return }
-            self.updatePanel(windows: windows, selectedIndex: selectedIndex)
-        }
     }
 
     private func updatePanel(windows: [WindowInfo], selectedIndex: Int) {

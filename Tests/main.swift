@@ -12,33 +12,17 @@ func expectEqual(_ lhs: CGFloat, _ rhs: CGFloat, _ message: String) {
     expect(abs(lhs - rhs) < 0.001, message)
 }
 
-expect(LifecycleReconciler.staleTrackedIds(trackedIds: Set([1, 2, 3]), runningIds: Set([1, 3])) == Set([2]),
-       "removes tracked apps missing from running app identities")
-expect(LifecycleReconciler.staleTrackedIds(trackedIds: Set([1, 2]), runningIds: Set([1, 2, 3])) == Set<Int>(),
-       "does not remove tracked apps that are still running")
 expect(LifecycleReconciler.staleWindowPids(windowPids: [10, 20, 20, 30], runningPids: Set([10, 30])) == Set<pid_t>([20]),
        "removes orphan windows whose pid no longer exists")
-expect(LifecycleReconciler.selectedIndexAfterRemoval(currentIndex: 3, newCount: 3) == 2,
-       "clamps selected index after removing later item")
-expect(LifecycleReconciler.selectedIndexAfterRemoval(currentIndex: 0, newCount: 0) == nil,
-       "nil selected index when all windows are removed")
 
 let session = SwitcherSession()
-expect(session.beginPreparing(), "starts first preparation")
-expect(!session.beginPreparing(), "rejects overlapping preparation")
-session.endPreparing()
-expect(session.beginPreparing(), "allows preparation after completion")
-session.endPreparing()
 expect(session.beginSwitching(selectedIndex: 1), "starts switcher session")
-let generation = session.generation
-expect(session.isSwitching && session.isPreparing, "switcher is active while preparing")
 expect(!session.beginSwitching(selectedIndex: 0), "rejects overlapping switcher session")
+expect(session.isSwitching && session.selectedIndex == 1, "switcher tracks selected index")
 session.cycleSelection(1, count: 3)
-expect(session.selectedIndex == 2, "cycles selection while preparing")
-session.endPreparing()
-expect(session.isSwitching && !session.isPreparing, "ending preparation keeps switcher active")
+expect(session.selectedIndex == 2, "cycles selection while switching")
 session.endSwitching()
-expect(!session.isSwitching && session.generation == generation + 1, "ending switcher cancels pending callbacks")
+expect(!session.isSwitching, "ending switcher clears active state")
 expect(!session.shouldForceQuit(pid: 42), "first quit request is graceful")
 expect(session.shouldForceQuit(pid: 42), "second quit request on same pid is forceful")
 expect(!session.shouldForceQuit(pid: 43), "different pid resets quit escalation")

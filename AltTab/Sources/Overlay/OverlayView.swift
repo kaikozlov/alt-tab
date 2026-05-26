@@ -71,6 +71,7 @@ final class OverlayView: NSVisualEffectView {
             let tile = tileViews[i]
             tile.configure(with: window)
             tile.isHighlighted = (i == selectedIndex)
+            tile.layoutSubtreeIfNeeded()
         }
         layoutTiles()
     }
@@ -79,18 +80,21 @@ final class OverlayView: NSVisualEffectView {
         while tileViews.count > count { tileViews.removeLast().removeFromSuperview() }
         while tileViews.count < count {
             let tile = TileView(frame: .zero)
+            tile.setThumbnailContents(nil)
             addSubview(tile)
             tileViews.append(tile)
         }
     }
 
-    func refreshThumbnails() {
-        for (i, tile) in tileViews.enumerated() where i < windows.count { tile.configure(with: windows[i]) }
+    func refreshThumbnail(for windowId: CGWindowID) {
+        guard let index = windows.firstIndex(where: { $0.windowId == windowId }), index < tileViews.count else { return }
+        guard windows[index].thumbnail != nil else { return }
+        let widthsBefore = windows.map { TileView.tileWidth(for: $0) }
+        tileViews[index].setThumbnailContents(windows[index].thumbnail)
+        tileViews[index].layoutSubtreeIfNeeded()
+        guard windows.map({ TileView.tileWidth(for: $0) }) != widthsBefore else { return }
         layoutTiles()
-        if let panel = window as? OverlayPanel {
-            panel.setContentSize(frame.size)
-            panel.showCentered()
-        }
+        (window as? OverlayPanel)?.setContentSize(frame.size)
     }
 
     func setSelectedIndex(_ index: Int) {
@@ -102,25 +106,6 @@ final class OverlayView: NSVisualEffectView {
 
     func getSelectedIndex() -> Int {
         return selectedIndex
-    }
-
-    func windowCount() -> Int {
-        return windows.count
-    }
-
-    func cycleForward() {
-        guard !windows.isEmpty else { return }
-        setSelectedIndex((selectedIndex + 1) % windows.count)
-    }
-
-    func cycleBackward() {
-        guard !windows.isEmpty else { return }
-        setSelectedIndex((selectedIndex - 1 + windows.count) % windows.count)
-    }
-
-    func selectedWindow() -> WindowInfo? {
-        guard selectedIndex >= 0, selectedIndex < windows.count else { return nil }
-        return windows[selectedIndex]
     }
 
     // MARK: - Layout

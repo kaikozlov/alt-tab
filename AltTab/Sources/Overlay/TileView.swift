@@ -25,19 +25,35 @@ final class TileView: NSView {
     }
 
     static func tileWidth(for window: WindowInfo) -> CGFloat {
-        return thumbnailWidth(for: window) + padding * 2
+        return thumbnailDisplaySize(for: window).width + padding * 2
     }
 
-    static func thumbnailWidth(for window: WindowInfo) -> CGFloat {
-        let imageSize = thumbnailSize(for: window)
-        guard imageSize.height > 0 else { return minThumbnailWidth }
-        let width = (thumbnailHeight * imageSize.width / imageSize.height).rounded()
-        return min(max(width, minThumbnailWidth), maxThumbnailWidth)
-    }
-
-    private static func thumbnailSize(for window: WindowInfo) -> CGSize {
-        guard let thumb = window.thumbnail else { return CGSize(width: 16, height: 10) }
-        return CGSize(width: thumb.width, height: thumb.height)
+    static func thumbnailDisplaySize(for window: WindowInfo) -> CGSize {
+        guard let source = window.contentSize, source.width > 0, source.height > 0 else {
+            return CGSize(width: minThumbnailWidth, height: thumbnailHeight)
+        }
+        let imageWidth = source.width
+        let imageHeight = source.height
+        let imageRatio = imageWidth / imageHeight
+        let thumbnailHeightMax = thumbnailHeight
+        let thumbnailWidthMax = maxThumbnailWidth
+        let boundedHeight = min(imageHeight, thumbnailHeightMax)
+        let boundedWidth = min(imageWidth, thumbnailWidthMax)
+        let thumbnailRatio = boundedWidth / boundedHeight
+        let width: CGFloat
+        let height: CGFloat
+        if thumbnailRatio > imageRatio {
+            height = boundedHeight
+            width = imageWidth * height / imageHeight
+        } else if thumbnailRatio < imageRatio {
+            width = boundedWidth
+            height = imageHeight * width / imageWidth
+        } else {
+            height = thumbnailHeightMax
+            width = height / imageHeight * imageWidth
+        }
+        return CGSize(width: min(max(width.rounded(), minThumbnailWidth), maxThumbnailWidth),
+                      height: min(height.rounded(), thumbnailHeightMax))
     }
 
     override init(frame: NSRect) {
@@ -64,12 +80,18 @@ final class TileView: NSView {
         layer?.addSublayer(highlightLayer)
     }
 
+    private static let disabledLayerActions: [String: CAAction] = [
+        "contents": NSNull(), "position": NSNull(), "bounds": NSNull(), "frame": NSNull(), "opacity": NSNull(),
+    ]
+
     private func setupThumbnail() {
         thumbnailLayer.contentsGravity = .resizeAspect
         thumbnailLayer.cornerRadius = 6
         thumbnailLayer.masksToBounds = true
         thumbnailLayer.borderWidth = 0.5
         thumbnailLayer.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        thumbnailLayer.actions = Self.disabledLayerActions
+        thumbnailLayer.backgroundColor = NSColor.black.withAlphaComponent(0.25).cgColor
         layer?.addSublayer(thumbnailLayer)
     }
 
@@ -89,9 +111,16 @@ final class TileView: NSView {
 
     func configure(with window: WindowInfo) {
         windowInfo = window
-        thumbnailLayer.contents = window.thumbnail ?? window.appIconCGImage
+        setThumbnailContents(window.thumbnail)
         iconView.image = window.appIcon
         titleLabel.stringValue = displayTitle(for: window)
+    }
+
+    func setThumbnailContents(_ image: CGImage?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        thumbnailLayer.contents = image
+        CATransaction.commit()
     }
 
     override func layout() {
@@ -105,8 +134,11 @@ final class TileView: NSView {
     private func layoutLayersAndViews() {
         let p = TileView.padding
         highlightLayer.frame = bounds
-        let thumbWidth = bounds.width - p * 2
-        thumbnailLayer.frame = CGRect(x: p, y: p, width: thumbWidth, height: TileView.thumbnailHeight)
+        let thumbSize = windowInfo.map { TileView.thumbnailDisplaySize(for: $0) }
+            ?? CGSize(width: bounds.width - p * 2, height: TileView.thumbnailHeight)
+        let thumbX = p + max(0, (bounds.width - p * 2 - thumbSize.width) / 2)
+        let thumbY = p + (TileView.thumbnailHeight - thumbSize.height) / 2
+        thumbnailLayer.frame = CGRect(x: thumbX, y: thumbY, width: thumbSize.width, height: thumbSize.height)
         let iconY = p + TileView.thumbnailHeight + TileView.titleGap
         iconView.frame = CGRect(x: p, y: iconY, width: TileView.iconSize, height: TileView.iconSize)
         let labelX = p + TileView.iconSize + 6

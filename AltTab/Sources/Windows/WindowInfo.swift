@@ -9,8 +9,8 @@ final class WindowInfo: @unchecked Sendable {
     let bundleId: String?
     var title: String
     var appIcon: NSImage?
-    let appIconCGImage: CGImage?
     var thumbnail: CGImage?
+    var contentSize: CGSize?
     var lastFocusOrder: Int = 0
     var isMinimized: Bool = false
 
@@ -25,7 +25,6 @@ final class WindowInfo: @unchecked Sendable {
         self.bundleId = bundleId
         self.title = title
         self.appIcon = appIcon
-        self.appIconCGImage = appIcon?.cgImage(forProposedRect: nil, context: nil, hints: nil)
     }
 
     /// Bring this window to the front and make it key.
@@ -76,6 +75,32 @@ final class WindowInfo: @unchecked Sendable {
         if let axTitle = axTitle(axElement), !axTitle.isEmpty { return axTitle }
         if let cgTitle = cgTitle(windowId), !cgTitle.isEmpty { return cgTitle }
         return appName
+    }
+
+    static func contentSize(axElement: AXUIElement, windowId: CGWindowID) -> CGSize? {
+        if let size = axSize(axElement) { return size }
+        return cgBounds(windowId)
+    }
+
+    func refreshContentSize() {
+        contentSize = WindowInfo.contentSize(axElement: axElement, windowId: windowId)
+    }
+
+    private static func axSize(_ el: AXUIElement) -> CGSize? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &value) == .success,
+              let axValue = value else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(axValue as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { return nil }
+        return size
+    }
+
+    private static func cgBounds(_ wid: CGWindowID) -> CGSize? {
+        let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], wid) as? [[CFString: Any]]
+        guard let bounds = info?.first?[kCGWindowBounds] as? [String: Any],
+              let width = bounds["Width"] as? CGFloat, let height = bounds["Height"] as? CGFloat,
+              width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
     }
 
     private static func axTitle(_ el: AXUIElement) -> String? {

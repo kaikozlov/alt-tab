@@ -17,6 +17,8 @@ final class WindowManager {
 
     var suppressFocusRefresh: (() -> Bool)?
 
+    var refreshThumbnails: (([WindowInfo]) -> Void)?
+
     private var appObservation: NSKeyValueObservation?
 
     private init() {}
@@ -63,6 +65,7 @@ final class WindowManager {
             discoverWindows(pid: pid, appName: app.localizedName ?? "Unknown", bundleId: app.bundleIdentifier, icon: app.icon)
             if windows.count != before { changed = true }
         }
+        for win in windows { win.refreshContentSize() }
         let focusChanged = syncFocusedWindowFromSystem()
         if changed || focusChanged {
             sortByFocusOrder()

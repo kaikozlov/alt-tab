@@ -10,6 +10,7 @@ final class Hotkey {
     var onCycleBackward: (() -> Void)?
     var onConfirm: (() -> Void)?
     var onCancel: (() -> Void)?
+    var switcherIsActive: (() -> Bool)?
     var onQuit: (() -> Void)?
     var onClose: (() -> Void)?
 
@@ -64,9 +65,10 @@ final class Hotkey {
     }
 
     private func handlePressedHotkey(_ id: UInt32) {
+        let active = switcherIsActive?() == true
         if id == Hotkey.hotkeyId {
-            panelIsOpen ? onCycleForward?() : onActivate?()
-        } else if id == Hotkey.shiftHotkeyId, panelIsOpen {
+            active ? onCycleForward?() : onActivate?()
+        } else if id == Hotkey.shiftHotkeyId, active {
             onCycleBackward?()
         }
     }
@@ -87,8 +89,8 @@ final class Hotkey {
             options: .defaultTap,
             eventsOfInterest: 1 << CGEventType.flagsChanged.rawValue,
             callback: { _, _, event, _ -> Unmanaged<CGEvent>? in
-                if !event.flags.contains(.maskCommand), Hotkey.shared.panelIsOpen {
-                    DispatchQueue.main.async { Hotkey.shared.onConfirm?() }
+                if !event.flags.contains(.maskCommand) {
+                    DispatchQueue.main.async { if Hotkey.shared.switcherIsActive?() == true { Hotkey.shared.onConfirm?() } }
                 }
                 return Unmanaged.passUnretained(event)
             },

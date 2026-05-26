@@ -1,6 +1,5 @@
 import Cocoa
 
-/// A single window tile in the switcher overlay: thumbnail + app icon + title.
 final class TileView: NSView {
     private let thumbnailLayer = CALayer()
     private let iconView = NSImageView()

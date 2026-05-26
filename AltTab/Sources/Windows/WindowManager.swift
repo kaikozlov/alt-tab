@@ -1,30 +1,20 @@
 import Cocoa
 import ApplicationServices
 
-/// Tracks all windows across all running applications using Accessibility APIs.
-/// No polling — uses AX observers + KVO for real-time updates.
 @MainActor
 final class WindowManager {
     static let shared = WindowManager()
 
-    /// Windows sorted by last-focus order (index 0 = most recently focused).
     var windows: [WindowInfo] = []
 
-    /// Called on main thread whenever the window list changes (add/remove/reorder).
-    /// Wired by AppDelegate to refresh the switcher panel if it's open.
     var onChange: (() -> Void)?
 
-    /// Tracked app identities. Removals use NSRunningApplication.isEqual like the reference;
-    /// pid can be unreliable once an app is terminating.
     var trackedApps: [pid_t: NSRunningApplication] = [:]
 
-    /// Per-app AX observers
     var observers: [pid_t: AXObserver] = [:]
 
-    /// Per-app KVO observations for activationPolicy (to catch apps that aren't ready yet)
     var policyObservations: [pid_t: NSKeyValueObservation] = [:]
 
-    /// KVO observation on NSWorkspace.runningApplications
     private var appObservation: NSKeyValueObservation?
 
     private init() {}
@@ -49,13 +39,10 @@ final class WindowManager {
         sortByZOrder()
     }
 
-    /// Returns windows in focus order, suitable for display in the switcher.
     func sortedWindows() -> [WindowInfo] {
         return windows
     }
 
-    /// Reference-style manual sync before showing the panel: remove dead apps/windows,
-    /// add any running apps KVO missed, then query each tracked app for missing windows.
     func syncWithRunningApplications() {
         let runningApps = NSWorkspace.shared.runningApplications
         let runningPids = Set(runningApps.map { $0.processIdentifier })
@@ -81,8 +68,6 @@ final class WindowManager {
         }
     }
 
-    /// Mark a window as most recently focused. Used after our own activation path because
-    /// AX focus notifications may arrive late or be skipped for some apps.
     func markFocused(_ window: WindowInfo) {
         guard moveToFront(windowId: window.windowId) else { return }
         onChange?()
@@ -118,8 +103,6 @@ final class WindowManager {
         reindex()
     }
 
-    /// Reference-style GC: AX can miss destroyed-window notifications, so verify our
-    /// tracked CGWindowIDs still exist in WindowServer before showing the panel.
     @discardableResult
     func removeZombieWindows() -> Bool {
         let ids = windows.map { $0.windowId }

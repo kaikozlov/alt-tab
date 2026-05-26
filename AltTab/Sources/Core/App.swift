@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayView: OverlayView!
     private var statusItem: NSStatusItem?
     private let session = SwitcherSession()
+    private var switcherWindows: [WindowInfo] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Permissions.ensureGranted()
@@ -29,53 +30,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupHotkeys() {
         Hotkey.shared.onActivate = { [weak self] in self?.showSwitcher() }
-        Hotkey.shared.onCycleForward = { [weak self] in self?.overlayView.cycleForward() }
-        Hotkey.shared.onCycleBackward = { [weak self] in self?.overlayView.cycleBackward() }
+        Hotkey.shared.onCycleForward = { [weak self] in self?.cycleSwitcher(1) }
+        Hotkey.shared.onCycleBackward = { [weak self] in self?.cycleSwitcher(-1) }
         Hotkey.shared.onConfirm = { [weak self] in self?.confirmSelection() }
         Hotkey.shared.onCancel = { [weak self] in self?.dismissSwitcher() }
         Hotkey.shared.onQuit = { [weak self] in self?.quitSelectedApp() }
         Hotkey.shared.onClose = { [weak self] in self?.closeSelectedWindow() }
+        Hotkey.shared.switcherIsActive = { [weak self] in self?.session.isSwitching == true }
     }
 
     // MARK: - Switcher lifecycle
 
     private func showSwitcher() {
-        guard session.beginPreparing() else { return }
         WindowManager.shared.syncWithRunningApplications()
         let windows = WindowManager.shared.sortedWindows()
-        guard !windows.isEmpty else { session.endPreparing(); return }
+        let index = initialSelectedIndex(for: windows)
+        guard !windows.isEmpty, session.beginSwitching(selectedIndex: index) else { return }
+        switcherWindows = windows
         ThumbnailCapture.releaseAll(windows)
+        let generation = session.generation
         ThumbnailCapture.captureAll(windows) { [weak self] in
             guard let self else { return }
             self.session.endPreparing()
-            guard NSEvent.modifierFlags.contains(.command) else { ThumbnailCapture.releaseAll(windows); return }
+            guard self.session.isSwitching, self.session.generation == generation else { ThumbnailCapture.releaseAll(windows); return }
+            guard NSEvent.modifierFlags.contains(.command) else { self.confirmSelection(); return }
             Hotkey.shared.setPanelOpen(true)
-            self.updatePanel(windows: windows, selectedIndex: 0)
+            self.updatePanel(windows: self.switcherWindows, selectedIndex: self.session.selectedIndex)
         }
     }
 
+    private func cycleSwitcher(_ step: Int) {
+        guard session.isSwitching else { return }
+        session.cycleSelection(step, count: switcherWindows.count)
+        if Hotkey.shared.panelIsOpen { overlayView.setSelectedIndex(session.selectedIndex) }
+    }
+
     private func confirmSelection() {
-        guard let window = overlayView.selectedWindow() else { dismissSwitcher(); return }
-        dismissSwitcher()
-        WindowManager.shared.markFocused(window)
-        window.focus()
+        guard let window = selectedWindow() else { dismissSwitcher(); return }
+        dismissSwitcher(); WindowManager.shared.markFocused(window); window.focus()
     }
 
     private func dismissSwitcher() {
         panel.dismiss()
         Hotkey.shared.setPanelOpen(false)
-        ThumbnailCapture.releaseAll(WindowManager.shared.sortedWindows())
+        ThumbnailCapture.releaseAll(switcherWindows.isEmpty ? WindowManager.shared.sortedWindows() : switcherWindows)
+        switcherWindows.removeAll()
+        session.endSwitching()
     }
 
     private func quitSelectedApp() {
-        guard let window = overlayView.selectedWindow() else { return }
+        guard let window = selectedWindow() else { return }
         guard let app = NSRunningApplication(processIdentifier: window.pid) else { return }
         guard app.bundleIdentifier != "com.apple.finder" else { NSSound.beep(); return }
         if session.shouldForceQuit(pid: window.pid) { app.forceTerminate() } else { app.terminate() }
     }
 
     private func closeSelectedWindow() {
-        guard let window = overlayView.selectedWindow() else { return }
+        guard let window = selectedWindow() else { return }
         window.closeSoftly { [weak self] in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 WindowManager.shared.syncWithRunningApplications()
@@ -88,11 +99,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Hotkey.shared.panelIsOpen else { return }
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { dismissSwitcher(); return }
-        let index = min(overlayView.getSelectedIndex(), windows.count - 1)
+        switcherWindows = windows
+        session.setSelectedIndex(min(overlayView.getSelectedIndex(), windows.count - 1), count: windows.count)
         if windows.contains(where: { $0.thumbnail == nil }) {
-            refreshPanelAfterCapturingMissing(windows: windows, selectedIndex: index)
+            refreshPanelAfterCapturingMissing(windows: windows, selectedIndex: session.selectedIndex)
         } else {
-            updatePanel(windows: windows, selectedIndex: index)
+            updatePanel(windows: windows, selectedIndex: session.selectedIndex)
         }
     }
 
@@ -108,9 +120,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updatePanel(windows: [WindowInfo], selectedIndex: Int) {
         overlayView.update(windows: windows, selectedIndex: selectedIndex)
-        panel.setContentSize(overlayView.frame.size)
-        panel.showCentered()
+        panel.setContentSize(overlayView.frame.size); panel.showCentered()
     }
+
+    private func selectedWindow() -> WindowInfo? {
+        let windows = switcherWindows.isEmpty ? WindowManager.shared.sortedWindows() : switcherWindows
+        let index = Hotkey.shared.panelIsOpen ? overlayView.getSelectedIndex() : session.selectedIndex
+        session.setSelectedIndex(index, count: windows.count)
+        return session.selectedIndex < windows.count ? windows[session.selectedIndex] : nil
+    }
+
+    private func initialSelectedIndex(for windows: [WindowInfo]) -> Int { windows.count > 1 ? 1 : 0 }
 
     // MARK: - Status item
 

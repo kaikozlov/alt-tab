@@ -1,6 +1,5 @@
 import Cocoa
 
-/// The content view of the switcher overlay. Owns TileViews and delegates flow-layout math to TileLayout.
 final class OverlayView: NSVisualEffectView {
     private var tileViews: [TileView] = []
     private var selectedIndex = 0

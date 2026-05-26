@@ -17,8 +17,8 @@ Read `ARCHITECTURE.md` for the full design, component breakdown, and activation 
 ## Project Structure
 
 ```
-Sources/
-  Core/                   — App delegate, lifecycle, permissions, switcher state
+AltTab/Sources/
+  Core/                   — App delegate, lifecycle, permissions, switcher state, throttling
   Hotkey/                 — Cmd+Tab interception and private SkyLight declarations
   Windows/                — AX window discovery, app tracking, focus ordering, models
   Overlay/                — Panel, layout, tiles, and thumbnail capture
@@ -122,7 +122,7 @@ testMyFeature()
 - Keep `[WindowInfo]` sorted by `lastFocusOrder` — updated on `kAXFocusedWindowChangedNotification`
 
 ### Thumbnail Capture
-- Primary: `SCScreenshotManager.captureSampleBuffer` (macOS 13+)
+- Primary: `SCScreenshotManager.captureSampleBuffer` (macOS 14+)
 - Fallback for minimized windows: `CGSHWCaptureWindowList` (private API)
 - Capture on a single background `DispatchQueue`, dispatch results to main
 

@@ -108,16 +108,16 @@ The reference uses private SkyLight APIs for reliable window activation:
 
 ### System requirements
 
-- macOS 13+ (Ventura) — we can use `SCScreenshotManager` for thumbnails, no need for the private `CGSHWCaptureWindowList` fallback
+- macOS 14+ (Sonoma) — `SCScreenshotManager.captureSampleBuffer` for thumbnails, with `CGSHWCaptureWindowList` private API fallback
 - Accessibility permission (required for AX window tracking)
 - Screen Recording permission (required for window thumbnails)
 
 ### File structure
 
 ```
-Sources/
+AltTab/Sources/
   Core/
-    main.swift, App.swift, Permissions.swift, SwitcherSession.swift
+    main.swift, App.swift, Permissions.swift, SwitcherSession.swift, Throttler.swift
   Hotkey/
     Hotkey.swift, SkyLight.swift
   Windows/
@@ -142,20 +142,26 @@ Two mechanisms, both essential:
 
 Flow:
 ```
-Cmd+Tab down  → Carbon hotkey → show panel, select window[1]
-Tab down      → local monitor → cycle selection forward
-Shift+Tab     → local monitor → cycle selection backward
-Escape        → local monitor → dismiss without switching
-Cmd up        → CGEventTap flagsChanged → focus selected window, hide panel
+Cmd+Tab down (panel closed) → Carbon hotkey → show panel, select window[1]
+Cmd+Tab down (panel open)   → Carbon hotkey → cycle selection forward
+Shift+Cmd+Tab               → Carbon hotkey → cycle selection backward
+Tab down                    → local monitor → cycle selection forward
+Shift+Tab                   → local monitor → cycle selection backward
+Left/Right arrow            → local monitor → cycle selection backward/forward
+Escape                      → local monitor → dismiss without switching
+Cmd+Q                       → local monitor → quit selected app (force-quit on repeat)
+Cmd+W                       → local monitor → close selected window
+Cmd up                      → CGEventTap flagsChanged → focus selected window, hide panel
 ```
 
 #### Window tracking (Windows/)
 
 Tracks all windows using the Accessibility API:
 
-- On launch: enumerate `NSWorkspace.shared.runningApplications`, filter to those with `activationPolicy == .regular`
-- For each app: create `AXUIElement(application: pid)`, query `kAXWindowsAttribute` to get windows
-- Subscribe to `kAXWindowCreatedNotification` and `kAXUIElementDestroyedNotification` per-app via `AXObserverCreate` + `AXObserverAddNotification`
+- On launch: observe `NSWorkspace.shared.runningApplications` via KVO for app launch/quit
+- For each `.regular` activation policy app: create `AXUIElement(application: pid)`, query `kAXWindowsAttribute` to get windows
+- Non-regular apps are observed for `activationPolicy` changes — tracked automatically when they switch to `.regular`
+- Subscribe per-app via `AXObserverCreate` + `AXObserverAddNotification` to: `kAXWindowCreatedNotification`, `kAXUIElementDestroyedNotification`, `kAXFocusedWindowChangedNotification`, `kAXMainWindowChangedNotification`, `kAXApplicationActivatedNotification`, `kAXWindowMiniaturizedNotification`, `kAXWindowDeminiaturizedNotification`
 - Each window gets a `CGWindowID` via `_AXUIElementGetWindow()` (private but stable)
 
 The window list is kept sorted by focus order. When an `kAXFocusedWindowChangedNotification` or `kAXApplicationActivatedNotification` fires, we move that window to index 0.
@@ -164,15 +170,18 @@ The window list is kept sorted by focus order. When an `kAXFocusedWindowChangedN
 
 Minimal `WindowInfo`:
 ```swift
-struct WindowInfo {
+class WindowInfo {
     let windowId: CGWindowID
     let axElement: AXUIElement
     let pid: pid_t
+    let appName: String
+    let bundleId: String?
     var title: String
-    var appName: String
-    var appIcon: CGImage?
-    var thumbnail: CGImage?  // captured on-demand only
+    var appIcon: NSImage?
+    var thumbnail: CGImage?
+    var contentSize: CGSize?
     var lastFocusOrder: Int
+    var isMinimized: Bool
 }
 ```
 
@@ -214,14 +223,35 @@ When the user releases Cmd:
 5. `AXUIElement.performAction(kAXRaiseAction)` as fallback
 6. Re-enable native Cmd+Tab via `CGSSetSymbolicHotKeyEnabled`
 
+#### Live panel refresh (Throttler + mergeSwitcherWindows)
+
+While the panel is open, AX observer callbacks may fire (windows created/destroyed, titles changed, focus shifted).
+`WindowManager.onChange` triggers `Throttler.throttleOrProceed` (200ms) which calls `refreshSwitcherPanel()`.
+This re-queries `sortedWindows()`, merges with the current switcher list preserving order and selection,
+then re-layouts the panel and refreshes thumbnails. This keeps the overlay in sync with reality without
+rapid re-layouts from bursty AX events.
+
+#### Status bar item
+
+A minimal `NSStatusItem` in the menu bar with the system symbol `rectangle.3.group`.
+Its dropdown menu has "About AltTab" (disabled placeholder) and "Quit".
+
+#### Window management shortcuts
+
+While the panel is open:
+- **Cmd+Q** — terminates the selected window's app. Pressing Cmd+Q again within the same session
+  force-terminates via `forceTerminate()`. Finder is protected with a beep.
+- **Cmd+W** — presses the window's close button via AX (`kAXCloseButtonAttribute` → `kAXPressAction`).
+  After a 200ms delay, re-syncs with running applications and refreshes the panel.
+
 #### Permissions (Permissions.swift)
 
 On launch:
-1. Check `AXIsProcessTrustedWithOptions` — if not granted, show a simple `NSAlert` directing user to System Settings, then poll every 1s until granted.
-2. Check `SCShareableContent.getExcludingDesktopWindows` — if it errors, prompt for Screen Recording permission similarly.
-3. Once both are granted, proceed with `App.start()`.
+1. Check `AXIsProcessTrustedWithOptions` — if not granted, prompt via `AXTrustedCheckOptionPrompt`, then show a modal `NSAlert` with OK/Quit buttons. Loop re-checks on OK until granted.
+2. Check `SCShareableContent.getExcludingDesktopWindows` via a blocking semaphore — if it errors, show a modal `NSAlert` with OK/"Continue Without Thumbnails" buttons. Loop re-checks on OK.
+3. Once both are granted, proceed with `applicationDidFinishLaunching`.
 
-No fancy permission window. Just alerts.
+No fancy permission window. Just modal alerts.
 
 ### Threading model
 

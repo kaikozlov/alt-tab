@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         dismissSwitcher()
+        WindowManager.shared.markFocused(window)
         window.focus()
     }
 

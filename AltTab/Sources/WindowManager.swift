@@ -92,10 +92,19 @@ final class WindowManager {
             }
         }
 
-        if changed {
+        let focusChanged = syncFocusedWindowFromSystem()
+
+        if changed || focusChanged {
             reindex()
             onChange?()
         }
+    }
+
+    /// Mark a window as most recently focused. Used after our own activation path because
+    /// AX focus notifications may arrive late or be skipped for some apps.
+    func markFocused(_ window: WindowInfo) {
+        guard moveToFront(windowId: window.windowId) else { return }
+        onChange?()
     }
 
     // MARK: - App tracking
@@ -148,6 +157,7 @@ final class WindowManager {
                 kAXWindowCreatedNotification,
                 kAXUIElementDestroyedNotification,
                 kAXFocusedWindowChangedNotification,
+                kAXMainWindowChangedNotification,
                 kAXApplicationActivatedNotification,
                 kAXWindowMiniaturizedNotification,
                 kAXWindowDeminiaturizedNotification,
@@ -267,7 +277,7 @@ final class WindowManager {
         case kAXUIElementDestroyedNotification:
             handleWindowDestroyed(element)
 
-        case kAXFocusedWindowChangedNotification, kAXApplicationActivatedNotification:
+        case kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification, kAXApplicationActivatedNotification:
             handleFocusChanged(element)
 
         case kAXWindowMiniaturizedNotification:
@@ -330,10 +340,11 @@ final class WindowManager {
         guard let wid = windowId(of: focusedElement) else { return }
 
         if let idx = windows.firstIndex(where: { $0.windowId == wid }) {
-            let win = windows.remove(at: idx)
+            let win = windows[idx]
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
-            windows.insert(win, at: 0)
-            reindex()
+            if moveToFront(windowId: wid) {
+                onChange?()
+            }
         } else {
             let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
             if let info = addWindowIfNew(focusedElement, pid: pid, appName: app?.localizedName ?? "Unknown",
@@ -346,6 +357,38 @@ final class WindowManager {
                 onChange?()
             }
         }
+    }
+
+    @discardableResult
+    private func syncFocusedWindowFromSystem() -> Bool {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return false }
+        let pid = app.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value,
+              let wid = windowId(of: value as! AXUIElement) else { return false }
+        let focusedElement = value as! AXUIElement
+
+        if windows.contains(where: { $0.windowId == wid }) {
+            return moveToFront(windowId: wid)
+        }
+
+        if addWindowIfNew(focusedElement, pid: pid, appName: app.localizedName ?? "Unknown",
+                          bundleId: app.bundleIdentifier, icon: app.icon) != nil {
+            return moveToFront(windowId: wid)
+        }
+        return false
+    }
+
+    @discardableResult
+    private func moveToFront(windowId: CGWindowID) -> Bool {
+        guard let idx = windows.firstIndex(where: { $0.windowId == windowId }) else { return false }
+        guard idx != 0 else { return false }
+        let win = windows.remove(at: idx)
+        windows.insert(win, at: 0)
+        reindex()
+        return true
     }
 
     // MARK: - Z-order sort (used once at startup)

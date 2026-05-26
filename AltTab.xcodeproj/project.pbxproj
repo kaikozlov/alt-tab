@@ -25,6 +25,14 @@
 		A10000010000000000000010 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010; };
 		A10000010000000000000011 /* AXHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000011; };
 		A10000010000000000000012 /* Throttler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000012; };
+		D10000010000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000001; };
+		D10000010000000000000002 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000002; };
+		D10000010000000000000003 /* LifecycleReconcilerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000003; };
+		D10000010000000000000004 /* SwitcherSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000004; };
+		D10000010000000000000005 /* TileLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000010000000000000005; };
+		D10000010000000000000006 /* LifecycleReconciler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000C; };
+		D10000010000000000000007 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010; };
+		D10000010000000000000008 /* TileLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000F; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,9 +57,22 @@
 		A30000010000000000000001 /* AltTab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AltTab.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A30000010000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A30000010000000000000003 /* AltTab.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AltTab.entitlements; sourceTree = "<group>"; };
+		B20000010000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B20000010000000000000002 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		B20000010000000000000003 /* LifecycleReconcilerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleReconcilerTests.swift; sourceTree = "<group>"; };
+		B20000010000000000000004 /* SwitcherSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSessionTests.swift; sourceTree = "<group>"; };
+		B20000010000000000000005 /* TileLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TileLayoutTests.swift; sourceTree = "<group>"; };
+		B30000010000000000000001 /* AltTabTests */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = AltTabTests; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		B40000010000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A40000010000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -66,8 +87,21 @@
 			isa = PBXGroup;
 			children = (
 				A50000010000000000000002 /* AltTab */,
+				B50000010000000000000001 /* Tests */,
 				A50000010000000000000004 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		B50000010000000000000001 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				B20000010000000000000001 /* main.swift */,
+				B20000010000000000000002 /* TestSupport.swift */,
+				B20000010000000000000003 /* LifecycleReconcilerTests.swift */,
+				B20000010000000000000004 /* SwitcherSessionTests.swift */,
+				B20000010000000000000005 /* TileLayoutTests.swift */,
+			);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 		A50000010000000000000002 /* AltTab */ = {
@@ -95,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				A30000010000000000000001 /* AltTab.app */,
+				B30000010000000000000001 /* AltTabTests */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -148,6 +183,22 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		B60000010000000000000001 /* AltTabTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B80000010000000000000001 /* Build configuration list for PBXNativeTarget "AltTabTests" */;
+			buildPhases = (
+				B70000010000000000000001 /* Sources */,
+				B40000010000000000000001 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AltTabTests;
+			productName = AltTabTests;
+			productReference = B30000010000000000000001 /* AltTabTests */;
+			productType = "com.apple.product-type.tool";
+		};
 		A60000010000000000000001 /* AltTab */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A80000010000000000000002 /* Build configuration list for PBXNativeTarget "AltTab" */;
@@ -188,11 +239,27 @@
 			projectRoot = "";
 			targets = (
 				A60000010000000000000001 /* AltTab */,
+				B60000010000000000000001 /* AltTabTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B70000010000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10000010000000000000001 /* main.swift in Sources */,
+				D10000010000000000000002 /* TestSupport.swift in Sources */,
+				D10000010000000000000003 /* LifecycleReconcilerTests.swift in Sources */,
+				D10000010000000000000004 /* SwitcherSessionTests.swift in Sources */,
+				D10000010000000000000005 /* TileLayoutTests.swift in Sources */,
+				D10000010000000000000006 /* LifecycleReconciler.swift in Sources */,
+				D10000010000000000000007 /* SwitcherSession.swift in Sources */,
+				D10000010000000000000008 /* TileLayout.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A70000010000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -336,6 +403,34 @@
 			};
 			name = Release;
 		};
+		C10000010000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		C10000010000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -353,6 +448,15 @@
 			buildConfigurations = (
 				B10000010000000000000003 /* Debug */,
 				B10000010000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B80000010000000000000001 /* Build configuration list for PBXNativeTarget "AltTabTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C10000010000000000000005 /* Debug */,
+				C10000010000000000000006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

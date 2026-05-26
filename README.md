@@ -1,5 +1,14 @@
 # alt-tab
 lightweight macos alt-tab
 
-## building?
-`xcodebuild`
+## building
+
+```bash
+xcodebuild -scheme AltTab -configuration Debug build
+```
+
+## tests
+
+```bash
+./scripts/test.sh
+```

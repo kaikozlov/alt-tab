@@ -29,12 +29,14 @@ Sources/
 This is an Xcode project because we need a proper `.app` bundle with `Info.plist`, entitlements, and code signing for `CGEventTap` + private APIs.
 
 ```bash
-# Build and run from Xcode
-open AltTab.xcodeproj
-
-# Or from command line
+# Build app
 xcodebuild -scheme AltTab -configuration Debug build
+
+# Run unit tests (pure logic; no permissions or GUI)
+./scripts/test.sh
 ```
+
+Tests live in `Tests/` and compile against extractable production sources (`LifecycleReconciler`, `SwitcherSession`, `TileLayout`, etc.). When adding logic that can run without AppKit, AX, or WindowServer, keep it in a dedicated type/file and add cases under `Tests/`. App integration (hotkeys, thumbnails, activation) stays manual until we have a harness.
 
 The app requires:
 - **Accessibility permission** — for AX window tracking and `CGEventTap`
@@ -99,7 +101,7 @@ Grant both in System Settings → Privacy & Security when prompted.
 - `CGSSetSymbolicHotKeyEnabled` state persists after app quit. Always restore it in `applicationWillTerminate` — if we crash without restoring, the user loses native Cmd+Tab entirely.
 - `CGEventTap` requires Accessibility permission. If it returns `nil` from `CGEvent.tapCreate`, the app cannot function — show an alert and exit.
 - Keep the total line count under 1800. If a file grows past 200 lines, it probably needs splitting. If the project grows past 1800 lines total, something is wrong. - Comments don't count against your budget. Tests don't count against your budget. Only real swift code counts against your budget.
-- We need proper testing AND proper commenting to have a maintainable codebase.
+- We need proper testing AND proper commenting to have a maintainable codebase. Run `./scripts/test.sh` before shipping logic changes. New testable production code should live in extractable types (like `TileLayout`, `LifecycleReconciler`) with matching files under `Tests/`.
 - Do not leave dead code around. Remove it immediately.
 - Do not create backward compatibility shims.
 - Do not leave code around after refactoring for compatibility of any kind. Rip the band aid off.

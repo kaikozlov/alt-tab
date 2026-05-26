@@ -68,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Hotkey.shared.onQuit = { [weak self] in
             self?.quitSelectedApp()
         }
+
+        Hotkey.shared.onClose = { [weak self] in
+            self?.closeSelectedWindow()
+        }
     }
 
     // MARK: - Switcher lifecycle
@@ -132,6 +136,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The KVO observer on runningApplications will fire removeApp(),
         // which removes windows and calls onChange -> refreshSwitcherPanel()
+    }
+
+    /// Close the selected window, equivalent to pressing its red close button.
+    private func closeSelectedWindow() {
+        guard let window = overlayView.selectedWindow() else { return }
+        window.closeSoftly { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                WindowManager.shared.syncWithRunningApplications()
+                self?.refreshSwitcherPanel()
+            }
+        }
     }
 
     /// Refresh the switcher panel with current window list, or dismiss if empty.

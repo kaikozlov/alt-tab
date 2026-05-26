@@ -11,6 +11,7 @@ final class Hotkey {
     var onConfirm: (() -> Void)?        // Cmd released → focus selected window
     var onCancel: (() -> Void)?         // Escape pressed → dismiss
     var onQuit: (() -> Void)?           // Q pressed while panel open → quit selected app
+    var onClose: (() -> Void)?          // W pressed while panel open → close selected window
 
     private var hotkeyRef: EventHotKeyRef?
     private var shiftHotkeyRef: EventHotKeyRef?
@@ -152,6 +153,10 @@ final class Hotkey {
 
             case kVK_ANSI_Q:
                 self.onQuit?()
+                return nil
+
+            case kVK_ANSI_W:
+                self.onClose?()
                 return nil
 
             case kVK_LeftArrow:

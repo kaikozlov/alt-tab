@@ -13,6 +13,8 @@ final class WindowInfo {
     var lastFocusOrder: Int = 0
     var isMinimized: Bool = false
 
+    private static let commandQueue = DispatchQueue(label: "dev.kai.AltTab.ax.commands")
+
     init(windowId: CGWindowID, axElement: AXUIElement, pid: pid_t,
          appName: String, bundleId: String?, title: String, appIcon: NSImage?) {
         self.windowId = windowId
@@ -33,6 +35,23 @@ final class WindowInfo {
 
         // AX fallback — raise the window
         AXUIElementPerformAction(axElement, kAXRaiseAction as CFString)
+    }
+
+    /// Press the window's close button via AX, equivalent to clicking the red traffic-light button.
+    func closeSoftly(completion: (() -> Void)? = nil) {
+        WindowInfo.commandQueue.async {
+            var value: AnyObject?
+            let error = AXUIElementCopyAttributeValue(self.axElement, kAXCloseButtonAttribute as CFString, &value)
+            let button = value as! AXUIElement?
+            let pressed = error == .success && button.map {
+                AXUIElementPerformAction($0, kAXPressAction as CFString) == .success
+            } == true
+
+            DispatchQueue.main.async {
+                if !pressed { NSSound.beep() }
+                completion?()
+            }
+        }
     }
 
     /// Ported from Hammerspoon: send raw event bytes to make a specific window key.

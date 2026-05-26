@@ -67,14 +67,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Hotkey.shared.setPanelOpen(true)
 
-        // Show panel immediately with app icons as placeholders
+        // Show panel instantly — thumbnails are already cached from background captures
         let initialIndex = windows.count > 1 ? 1 : 0
         overlayView.update(windows: windows, selectedIndex: initialIndex)
         panel.setContentSize(overlayView.frame.size)
         panel.showCentered()
 
-        // Capture thumbnails async (SCKit for full content, private API for minimized).
-        // Once ready, refresh the tiles in place.
+        // Refresh any stale/missing thumbnails in the background
         ThumbnailCapture.captureAll(windows) { [weak self] in
             guard let self, Hotkey.shared.panelIsOpen else { return }
             self.overlayView.refreshThumbnails()
@@ -93,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissSwitcher() {
         panel.dismiss()
         Hotkey.shared.setPanelOpen(false)
-        ThumbnailCapture.releaseAll(WindowManager.shared.sortedWindows())
+        // Thumbnails stay cached for instant display next time
     }
 
     // MARK: - Status item

@@ -88,6 +88,11 @@ final class WindowManager {
 
         // Enumerate existing windows for this app
         discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
+
+        // Capture initial thumbnails for all discovered windows of this app
+        for win in windows where win.pid == pid {
+            ThumbnailCapture.cacheInBackground(win)
+        }
     }
 
     private func removeApp(_ app: NSRunningApplication) {
@@ -147,11 +152,13 @@ final class WindowManager {
         case kAXWindowMiniaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = true
+                ThumbnailCapture.cacheInBackground(win)
             }
 
         case kAXWindowDeminiaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = false
+                ThumbnailCapture.cacheInBackground(win)
             }
 
         default:
@@ -169,7 +176,9 @@ final class WindowManager {
         let bundleId = app?.bundleIdentifier
         let icon = app?.icon
 
-        addWindowIfNew(element, pid: pid, appName: appName, bundleId: bundleId, icon: icon)
+        if let win = addWindowIfNew(element, pid: pid, appName: appName, bundleId: bundleId, icon: icon) {
+            ThumbnailCapture.cacheInBackground(win)
+        }
     }
 
     private func handleWindowDestroyed(_ element: AXUIElement) {
@@ -206,6 +215,7 @@ final class WindowManager {
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
             windows.insert(win, at: 0)
             reindex()
+            ThumbnailCapture.cacheInBackground(win)
         } else {
             // New window we hadn't seen — add it at front
             let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }

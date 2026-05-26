@@ -98,7 +98,8 @@ Grant both in System Settings → Privacy & Security when prompted.
 - The overlay must never become the key window of the frontmost app — use `.nonactivatingPanel` and never call `NSApp.activate()` while the panel is visible.
 - `CGSSetSymbolicHotKeyEnabled` state persists after app quit. Always restore it in `applicationWillTerminate` — if we crash without restoring, the user loses native Cmd+Tab entirely.
 - `CGEventTap` requires Accessibility permission. If it returns `nil` from `CGEvent.tapCreate`, the app cannot function — show an alert and exit.
-- Keep the total line count under 1800. If a file grows past 200 lines, it probably needs splitting. If the project grows past 1800 lines total, something is wrong. - Comments don't count. Tests Don't count. Only real swift code counts toward this limit.
+- Keep the total line count under 1800. If a file grows past 200 lines, it probably needs splitting. If the project grows past 1800 lines total, something is wrong. - Comments don't count against your budget. Tests don't count against your budget. Only real swift code counts against your budget.
+- We need proper testing AND proper commenting to have a maintainable codebase.
 - Do not leave dead code around. Remove it immediately.
 - Do not create backward compatibility shims.
 - Do not leave code around after refactoring for compatibility of any kind. Rip the band aid off.

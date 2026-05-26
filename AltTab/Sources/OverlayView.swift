@@ -111,6 +111,13 @@ final class OverlayView: NSVisualEffectView {
         setSelectedIndex(prev)
     }
 
+    /// Refresh tile thumbnails in-place without rebuilding layout.
+    func refreshThumbnails() {
+        for (i, tile) in tileViews.enumerated() where i < windows.count {
+            tile.configure(with: windows[i])
+        }
+    }
+
     /// Get the currently selected window.
     func selectedWindow() -> WindowInfo? {
         guard selectedIndex >= 0, selectedIndex < windows.count else { return nil }

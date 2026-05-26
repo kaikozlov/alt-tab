@@ -65,16 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windows = WindowManager.shared.sortedWindows()
         guard !windows.isEmpty else { return }
 
-        // Capture all thumbnails FIRST (parallel, ~5-10ms total), then show panel.
-        // CGSHWCaptureWindowList is synchronous and fast, so this doesn't block perceptibly.
         Hotkey.shared.setPanelOpen(true)
+
+        // Show panel immediately with app icons as placeholders
+        let initialIndex = windows.count > 1 ? 1 : 0
+        overlayView.update(windows: windows, selectedIndex: initialIndex)
+        panel.setContentSize(overlayView.frame.size)
+        panel.showCentered()
+
+        // Capture thumbnails async (SCKit for full content, private API for minimized).
+        // Once ready, refresh the tiles in place.
         ThumbnailCapture.captureAll(windows) { [weak self] in
             guard let self, Hotkey.shared.panelIsOpen else { return }
-
-            let initialIndex = windows.count > 1 ? 1 : 0
-            self.overlayView.update(windows: windows, selectedIndex: initialIndex)
-            self.panel.setContentSize(self.overlayView.frame.size)
-            self.panel.showCentered()
+            self.overlayView.refreshThumbnails()
         }
     }
 

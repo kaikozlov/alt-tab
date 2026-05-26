@@ -10,6 +10,7 @@ final class Hotkey {
     var onCycleBackward: (() -> Void)?  // Shift+Tab while panel is open
     var onConfirm: (() -> Void)?        // Cmd released → focus selected window
     var onCancel: (() -> Void)?         // Escape pressed → dismiss
+    var onQuit: (() -> Void)?           // Q pressed while panel open → quit selected app
 
     private var hotkeyRef: EventHotKeyRef?
     private var shiftHotkeyRef: EventHotKeyRef?
@@ -147,6 +148,10 @@ final class Hotkey {
 
             case kVK_Escape:
                 self.onCancel?()
+                return nil
+
+            case kVK_ANSI_Q:
+                self.onQuit?()
                 return nil
 
             case kVK_LeftArrow:

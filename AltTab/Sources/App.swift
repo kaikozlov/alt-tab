@@ -60,6 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Hotkey.shared.onCancel = { [weak self] in
             self?.dismissSwitcher()
         }
+
+        Hotkey.shared.onQuit = { [weak self] in
+            self?.quitSelectedApp()
+        }
     }
 
     // MARK: - Switcher lifecycle
@@ -96,6 +100,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.dismiss()
         Hotkey.shared.setPanelOpen(false)
         // Thumbnails stay cached for instant display next time
+    }
+
+    /// Quit the app owning the selected window. First press = graceful terminate,
+    /// second press on same app = force terminate (same as reference).
+    private var lastQuitPid: pid_t = 0
+    private func quitSelectedApp() {
+        guard let window = overlayView.selectedWindow() else { return }
+        guard let app = NSRunningApplication(processIdentifier: window.pid) else { return }
+
+        // Don't quit Finder
+        if app.bundleIdentifier == "com.apple.finder" {
+            NSSound.beep()
+            return
+        }
+
+        if lastQuitPid == window.pid {
+            app.forceTerminate()
+        } else {
+            app.terminate()
+            lastQuitPid = window.pid
+        }
+
+        // Refresh the panel after a short delay to let the app die
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, Hotkey.shared.panelIsOpen else { return }
+            let windows = WindowManager.shared.sortedWindows()
+            if windows.isEmpty {
+                self.dismissSwitcher()
+            } else {
+                let idx = min(self.overlayView.getSelectedIndex(), windows.count - 1)
+                self.overlayView.update(windows: windows, selectedIndex: idx)
+                self.panel.setContentSize(self.overlayView.frame.size)
+                self.panel.showCentered()
+            }
+        }
     }
 
     // MARK: - Status item

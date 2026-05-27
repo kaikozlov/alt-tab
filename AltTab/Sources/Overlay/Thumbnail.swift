@@ -27,7 +27,7 @@ enum ThumbnailCapture {
         guard !eligible.isEmpty else { return }
         let prioritized = prioritizedIds ?? []
         let sorted = eligible.sorted { prioritized.contains($0.windowId) && !prioritized.contains($1.windowId) }
-        let requests = sorted.map { CaptureRequest(windowId: $0.windowId, window: $0) }
+        let requests = sorted.map { CaptureRequest(windowId: $0.windowId, contentSize: $0.contentSize, window: $0) }
         if #available(macOS 14.0, *) {
             refreshWithSCKit(requests, source: source)
         } else {
@@ -40,8 +40,7 @@ enum ThumbnailCapture {
     @available(macOS 14.0, *)
     private static func refreshWithSCKit(_ requests: [CaptureRequest], source: Source) {
         screenshotsQueue.addOperation {
-            let ids = requests.map(\.windowId)
-            let (cached, missing) = sortCachedAndNotCached(ids)
+            let (cached, missing) = sortCachedAndNotCached(requests)
             let byId = Dictionary(uniqueKeysWithValues: requests.map { ($0.windowId, $0) })
             for scWindow in cached {
                 guard let request = byId[scWindow.windowID] else { continue }
@@ -51,14 +50,13 @@ enum ThumbnailCapture {
             guard !missing.isEmpty else { return }
             SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
                 guard let content, error == nil else {
-                    refreshWithPrivateAPI(missing.compactMap { byId[$0] }, source: source)
+                    refreshWithPrivateAPI(missing, source: source)
                     return
                 }
                 screenshotsQueue.addOperation {
                     cachedSCWindows.withLock { $0 = content.windows }
-                    for wid in missing {
-                        guard let request = byId[wid] else { continue }
-                        if let scWindow = content.windows.first(where: { $0.windowID == wid }) {
+                    for request in missing {
+                        if let scWindow = content.windows.first(where: { $0.windowID == request.windowId }) {
                             if request.window?.isMinimized == true { enqueuePrivateAPI(request, source: source) }
                             else { capture(scWindow, request: request, source: source) }
                         } else {
@@ -71,17 +69,27 @@ enum ThumbnailCapture {
     }
 
     @available(macOS 14.0, *)
-    private static func sortCachedAndNotCached(_ ids: [CGWindowID]) -> ([SCWindow], [CGWindowID]) {
+    private static func sortCachedAndNotCached(_ requests: [CaptureRequest]) -> ([SCWindow], [CaptureRequest]) {
         cachedSCWindows.withLock { cache in
             let byId = Dictionary(uniqueKeysWithValues: cache.map { ($0.windowID, $0) })
             var cached = [SCWindow]()
-            var missing = [CGWindowID]()
-            for id in ids {
-                if let scWindow = byId[id] { cached.append(scWindow) }
-                else { missing.append(id) }
+            var missing = [CaptureRequest]()
+            for request in requests {
+                if let scWindow = byId[request.windowId], cachedFrameMatches(scWindow, request: request) {
+                    cached.append(scWindow)
+                } else {
+                    missing.append(request)
+                }
             }
             return (cached, missing)
         }
+    }
+
+    @available(macOS 14.0, *)
+    private static func cachedFrameMatches(_ scWindow: SCWindow, request: CaptureRequest) -> Bool {
+        guard let expected = request.contentSize else { return true }
+        let actual = scWindow.frame.size
+        return abs(actual.width - expected.width) <= 2 && abs(actual.height - expected.height) <= 2
     }
 
     @available(macOS 14.0, *)
@@ -145,6 +153,7 @@ enum ThumbnailCapture {
 
     private struct CaptureRequest {
         let windowId: CGWindowID
+        let contentSize: CGSize?
         weak var window: WindowInfo?
     }
 

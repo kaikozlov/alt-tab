@@ -13,6 +13,8 @@ final class WindowInfo: @unchecked Sendable {
     var contentSize: CGSize?
     var lastFocusOrder: Int = 0
     var isMinimized: Bool = false
+    private var thumbnailRevision: UInt64 = 0
+    private var thumbnailCapturePending = false
 
     private static let commandQueue = DispatchQueue(label: "dev.kai.AltTab.ax.commands")
 
@@ -87,8 +89,29 @@ final class WindowInfo: @unchecked Sendable {
         let size = WindowInfo.contentSize(axElement: axElement, windowId: windowId)
         guard size != contentSize else { return false }
         contentSize = size
-        thumbnail = nil
+        invalidateThumbnail()
         return true
+    }
+
+    func beginThumbnailCapture(refreshCached: Bool) -> UInt64? {
+        guard refreshCached || (thumbnail == nil && !thumbnailCapturePending) else { return nil }
+        thumbnailRevision &+= 1
+        thumbnailCapturePending = true
+        return thumbnailRevision
+    }
+
+    func applyThumbnail(_ image: CGImage?, revision: UInt64) -> Bool {
+        guard revision == thumbnailRevision else { return false }
+        thumbnailCapturePending = false
+        guard let image else { return false }
+        thumbnail = image
+        return true
+    }
+
+    func invalidateThumbnail() {
+        thumbnailRevision &+= 1
+        thumbnailCapturePending = false
+        thumbnail = nil
     }
 
     private static func axSize(_ el: AXUIElement) -> CGSize? {

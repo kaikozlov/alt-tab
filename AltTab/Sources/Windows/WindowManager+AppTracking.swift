@@ -98,7 +98,7 @@ extension WindowManager {
             self.discoverWindows(pid: pid, appName: appName, bundleId: bundleId, icon: icon)
             let added = self.windows.filter { $0.pid == pid }
             guard !added.isEmpty else { return }
-            self.refreshThumbnails?(added)
+            self.refreshThumbnails?(added, false)
             self.onChange?()
         }
     }

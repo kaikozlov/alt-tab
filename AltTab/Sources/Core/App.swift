@@ -16,8 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshPanelThrottler.throttleOrProceed { self?.refreshSwitcherPanel() }
         }
         WindowManager.shared.suppressFocusRefresh = { [weak self] in self?.session.isSwitching == true }
-        WindowManager.shared.refreshThumbnails = { ThumbnailCapture.refreshAsync($0) }
-        ThumbnailCapture.switcherIsActive = { [weak self] in self?.session.isSwitching == true }
+        WindowManager.shared.refreshThumbnails = { ThumbnailCapture.refreshAsync($0, refreshCached: $1) }
         ThumbnailCapture.onThumbnailUpdated = { [weak self] windowId in
             guard Hotkey.shared.panelIsOpen else { return }
             self?.overlayView.refreshThumbnail(for: windowId)
@@ -54,7 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Switcher lifecycle
 
     private func showSwitcher() {
-        WindowManager.shared.syncWithRunningApplications()
         let windows = WindowManager.shared.sortedWindows()
         let index = initialSelectedIndex(for: windows)
         guard !windows.isEmpty, session.beginSwitching(selectedIndex: index) else { return }
@@ -67,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard session.isSwitching else { return }
         updatePanel(windows: switcherWindows, selectedIndex: session.selectedIndex)
         Hotkey.shared.setPanelOpen(true)
-        ThumbnailCapture.refreshAsync(switcherWindows, source: .afterShowUi, prioritizedIds: prioritizedWindowIds())
+        ThumbnailCapture.refreshAsync(switcherWindows, prioritizedIds: prioritizedWindowIds())
     }
 
     private func cycleSwitcher(_ step: Int) {
@@ -115,15 +113,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? min(overlayView.getSelectedIndex(), windows.count - 1)
         session.setSelectedIndex(selectedIndex, count: windows.count)
         updatePanel(windows: windows, selectedIndex: session.selectedIndex)
-        ThumbnailCapture.refreshAsync(windows, source: .afterShowUi, prioritizedIds: prioritizedWindowIds())
+        ThumbnailCapture.refreshAsync(windows, prioritizedIds: prioritizedWindowIds())
     }
 
-    private func prioritizedWindowIds() -> Set<CGWindowID> {
-        var ids = Set<CGWindowID>()
+    private func prioritizedWindowIds() -> [CGWindowID] {
+        var ids = [CGWindowID]()
         for offset in [0, 1, -1, 2, -2] {
             let index = session.selectedIndex + offset
             guard switcherWindows.indices.contains(index) else { continue }
-            ids.insert(switcherWindows[index].windowId)
+            let id = switcherWindows[index].windowId
+            if !ids.contains(id) { ids.append(id) }
         }
         return ids
     }

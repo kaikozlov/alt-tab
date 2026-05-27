@@ -17,7 +17,9 @@ final class WindowManager {
 
     var suppressFocusRefresh: (() -> Bool)?
 
-    var refreshThumbnails: (([WindowInfo]) -> Void)?
+    var refreshThumbnails: (([WindowInfo], Bool) -> Void)?
+
+    var focusedWindowId: CGWindowID?
 
     private var appObservation: NSKeyValueObservation?
 
@@ -41,6 +43,7 @@ final class WindowManager {
             }
         }
         sortByZOrder()
+        focusedWindowId = windows.first?.windowId
     }
 
     func sortedWindows() -> [WindowInfo] {

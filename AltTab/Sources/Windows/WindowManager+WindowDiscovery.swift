@@ -16,12 +16,12 @@ extension WindowManager {
         case kAXWindowMiniaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = true
-                win.thumbnail = nil
+                win.invalidateThumbnail()
             }
         case kAXWindowDeminiaturizedNotification:
             if let wid = windowId(of: element), let win = windows.first(where: { $0.windowId == wid }) {
                 win.isMinimized = false
-                refreshThumbnails?([win])
+                refreshThumbnails?([win], false)
             }
         default:
             break
@@ -37,7 +37,7 @@ extension WindowManager {
         let app = NSWorkspace.shared.runningApplications.first { $0.processIdentifier == pid }
         if let info = addWindowIfNew(element, pid: pid, appName: app?.localizedName ?? "Unknown",
                                      bundleId: app?.bundleIdentifier, icon: app?.icon) {
-            refreshThumbnails?([info])
+            refreshThumbnails?([info], false)
             onChange?()
         }
     }
@@ -71,18 +71,26 @@ extension WindowManager {
             focusedElement = axEl
         }
         guard let wid = windowId(of: focusedElement) else { return }
+        refreshWindowBeingLeft(newFocusedWindowId: wid)
         if let idx = windows.firstIndex(where: { $0.windowId == wid }) {
             let win = windows[idx]
             win.title = WindowInfo.bestTitle(axElement: win.axElement, windowId: wid, appName: win.appName)
             win.refreshContentSize()
-            refreshThumbnails?([win])
             notifyFocusChangeIfNeeded(updateLastFocusOrder(windowId: wid))
-        } else if let info = addWindowIfNew(focusedElement, pid: pid, appName: app.localizedName ?? "Unknown",
-                                            bundleId: app.bundleIdentifier, icon: app.icon) {
+        } else if addWindowIfNew(focusedElement, pid: pid, appName: app.localizedName ?? "Unknown",
+                                  bundleId: app.bundleIdentifier, icon: app.icon) != nil {
             _ = updateLastFocusOrder(windowId: wid)
-            refreshThumbnails?([info])
             notifyFocusChangeIfNeeded(true)
         }
+    }
+
+    private func refreshWindowBeingLeft(newFocusedWindowId: CGWindowID) {
+        defer { focusedWindowId = newFocusedWindowId }
+        guard let oldId = focusedWindowId, oldId != newFocusedWindowId,
+              let oldWindow = windows.first(where: { $0.windowId == oldId }) else { return }
+        oldWindow.title = WindowInfo.bestTitle(axElement: oldWindow.axElement, windowId: oldId, appName: oldWindow.appName)
+        oldWindow.refreshContentSize()
+        refreshThumbnails?([oldWindow], true)
     }
 
     private func notifyFocusChangeIfNeeded(_ changed: Bool) {
@@ -99,6 +107,7 @@ extension WindowManager {
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &value) == .success,
               let axEl = safeAXElement(from: value),
               let wid = windowId(of: axEl) else { return false }
+        focusedWindowId = wid
         if windows.contains(where: { $0.windowId == wid }) {
             return updateLastFocusOrder(windowId: wid)
         }

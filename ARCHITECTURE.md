@@ -1,11 +1,11 @@
 # Architecture — AltTab (minimal)
 
-A minimal, fast window-switcher for macOS. Zero dependencies. Zero background CPU. Instant activation.
+A minimal, fast window-switcher for macOS. Zero dependencies. Zero continuous idle work. Instant activation.
 
 ## Goals
 
 - Replace `Cmd+Tab` with a switcher that shows **window thumbnails** (not just app icons)
-- Near-zero resource usage when idle (no polling, no background timers, no analytics)
+- Near-zero resource usage when idle (no polling, no background timers, bounded event-driven thumbnail refreshes)
 - Single-binary, no external frameworks, no Sparkle, no ShortcutRecorder, no AppCenter
 - ~800–1200 lines of Swift total
 
@@ -187,11 +187,11 @@ class WindowInfo {
 
 #### Thumbnail capture (Thumbnail.swift)
 
-- **On-demand only** — no background capture polling. Thumbnails are captured when the switcher is shown.
+- **Event-driven cache** — thumbnails are retained for instant summon and refreshed only on startup, window lifecycle changes, or when leaving a focused window.
 - Uses `SCScreenshotManager.captureSampleBuffer` with `SCContentFilter(desktopIndependentWindow:)`.
 - Captures happen on a background queue, results dispatched to main thread.
 - For minimized windows: `CGSHWCaptureWindowList` (private API) is the only option that works. We include this fallback.
-- Thumbnail images are released when the panel is hidden.
+- Showing the switcher uses cached thumbnails immediately and captures missing tiles asynchronously, prioritizing the selection and its neighbors.
 
 #### Overlay (OverlayPanel.swift + OverlayView.swift + TileView.swift)
 
@@ -256,14 +256,14 @@ No fancy permission window. Just modal alerts.
 ### Threading model
 
 - **Main thread**: All UI (panel show/hide/layout), hotkey callbacks, AX observer callbacks, window list mutations
-- **Background queue** (1 concurrent): Thumbnail capture only
-- No timers. No polling. No background work when the panel is hidden.
+- **Background queue** (up to 8 concurrent): Thumbnail capture only
+- No timers or polling. Hidden-state thumbnail work is bounded to meaningful window/focus events.
 
 ### Memory model
 
-- When panel is hidden: only the window list metadata in memory (~1KB per window). No thumbnails, no tile views.
-- When panel is shown: thumbnails captured and held. Tile views created (recycled pool of ~20).
-- When panel is hidden again: thumbnails released immediately.
+- When panel is hidden: window metadata and one scaled cached thumbnail per captured window remain in memory.
+- When panel is shown: cached thumbnails display immediately; missing snapshots are captured asynchronously.
+- When panel is hidden again: tile views remain reusable and cached thumbnails support the next instant summon.
 
 ### Build
 
@@ -308,7 +308,7 @@ Actually — since we need a proper `.app` bundle with `Info.plist`, entitlement
 | Preview panel (side preview) | Nothing | Thumbnail in tile is enough |
 | VoiceOver support | Nothing | Future if needed |
 | Multiple appearance styles | One (thumbnails) | The whole point |
-| Background thumbnail capture | On-demand only | Zero idle CPU |
+| Continuous background thumbnail capture | Event-driven cache only | Instant summon without polling |
 | Mission Control integration | Nothing | Don't need it |
 
 ### Estimated size

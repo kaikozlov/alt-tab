@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A minimal, zero-dependency macOS window switcher. Replaces Cmd+Tab with a thumbnail-based overlay. Target: ~1000 lines of Swift, instant activation, zero idle CPU.
+A minimal, zero-dependency macOS window switcher. Replaces Cmd+Tab with a thumbnail-based overlay. Target: ~1000 lines of Swift, instant activation, zero continuous idle work.
 
 Read `ARCHITECTURE.md` for the full design, component breakdown, and activation flow.
 
@@ -100,8 +100,8 @@ testMyFeature()
 
 ## Architecture Rules
 
-- **Zero idle CPU**: No timers, no polling, no background work when the overlay is hidden. AX observer callbacks are the only event source.
-- **On-demand thumbnails only**: Capture screenshots when the switcher is shown, release them when it's hidden. Never capture in the background.
+- **Zero continuous idle work**: No timers or polling. AX observer callbacks may trigger bounded cache updates while the overlay is hidden.
+- **Event-driven thumbnail cache**: Retain scaled previews for instant summon. Refresh on startup, relevant window lifecycle events, and when leaving a focused window; on summon, capture only missing previews.
 - **Main thread for everything except thumbnails**: Window list mutations, UI updates, hotkey callbacks — all main thread. Only thumbnail capture goes to a background queue.
 - **No preferences UI**: Hardcode sane defaults. If something needs to be tweakable, use `defaults write com.alt-tab.app <key> <value>`.
 - **Private APIs are acceptable**: We use SkyLight/CGS APIs (`CGSSetSymbolicHotKeyEnabled`, `_SLPSSetFrontProcessWithOptions`, `SLPSPostEventRecordTo`, `CGSHWCaptureWindowList`) because there is no public alternative for reliable window switching. Declare them in `SkyLight.swift` with `@_silgen_name`.

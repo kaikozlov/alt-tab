@@ -2,12 +2,8 @@ import Cocoa
 @preconcurrency import ScreenCaptureKit
 
 enum ThumbnailCapture {
-    enum Source { case afterShowUi, externalEvent }
-
-    @MainActor static var switcherIsActive: () -> Bool = { false }
     @MainActor static var onThumbnailUpdated: (CGWindowID) -> Void = { _ in }
 
-    private static let captureInBackground = true
     private static let screenshotsQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.name = "screenshots"
@@ -21,46 +17,51 @@ enum ThumbnailCapture {
     private static let cachedSCWindows = LockedArray<SCWindow>()
 
     @MainActor
-    static func refreshAsync(_ windows: [WindowInfo], source: Source = .externalEvent, prioritizedIds: Set<CGWindowID>? = nil) {
-        guard captureInBackground || switcherIsActive() else { return }
-        let eligible = windows.filter { $0.windowId != 0 }
-        guard !eligible.isEmpty else { return }
-        let prioritized = prioritizedIds ?? []
-        let sorted = eligible.sorted { prioritized.contains($0.windowId) && !prioritized.contains($1.windowId) }
-        let requests = sorted.map { CaptureRequest(windowId: $0.windowId, contentSize: $0.contentSize, window: $0) }
+    static func refreshAsync(_ windows: [WindowInfo], refreshCached: Bool = false, prioritizedIds: [CGWindowID] = []) {
+        let ranks = Dictionary(uniqueKeysWithValues: prioritizedIds.enumerated().map { ($0.element, $0.offset) })
+        let ordered = windows.enumerated().filter { $0.element.windowId != 0 }.sorted {
+            let lhs = ranks[$0.element.windowId] ?? Int.max
+            let rhs = ranks[$1.element.windowId] ?? Int.max
+            return lhs == rhs ? $0.offset < $1.offset : lhs < rhs
+        }.map(\.element)
+        let requests = ordered.compactMap { window -> CaptureRequest? in
+            guard let revision = window.beginThumbnailCapture(refreshCached: refreshCached) else { return nil }
+            return CaptureRequest(windowId: window.windowId, contentSize: window.contentSize, revision: revision, window: window)
+        }
+        guard !requests.isEmpty else { return }
         if #available(macOS 14.0, *) {
-            refreshWithSCKit(requests, source: source)
+            refreshWithSCKit(requests)
         } else {
-            refreshWithPrivateAPI(requests, source: source)
+            refreshWithPrivateAPI(requests)
         }
     }
 
     // MARK: - SCKit
 
     @available(macOS 14.0, *)
-    private static func refreshWithSCKit(_ requests: [CaptureRequest], source: Source) {
+    private static func refreshWithSCKit(_ requests: [CaptureRequest]) {
         screenshotsQueue.addOperation {
             let (cached, missing) = sortCachedAndNotCached(requests)
             let byId = Dictionary(uniqueKeysWithValues: requests.map { ($0.windowId, $0) })
             for scWindow in cached {
                 guard let request = byId[scWindow.windowID] else { continue }
-                if request.window?.isMinimized == true { enqueuePrivateAPI(request, source: source) }
-                else { capture(scWindow, request: request, source: source) }
+                if request.window?.isMinimized == true { enqueuePrivateAPI(request) }
+                else { capture(scWindow, request: request) }
             }
             guard !missing.isEmpty else { return }
             SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { content, error in
                 guard let content, error == nil else {
-                    refreshWithPrivateAPI(missing, source: source)
+                    refreshWithPrivateAPI(missing)
                     return
                 }
                 screenshotsQueue.addOperation {
                     cachedSCWindows.withLock { $0 = content.windows }
                     for request in missing {
                         if let scWindow = content.windows.first(where: { $0.windowID == request.windowId }) {
-                            if request.window?.isMinimized == true { enqueuePrivateAPI(request, source: source) }
-                            else { capture(scWindow, request: request, source: source) }
+                            if request.window?.isMinimized == true { enqueuePrivateAPI(request) }
+                            else { capture(scWindow, request: request) }
                         } else {
-                            enqueuePrivateAPI(request, source: source)
+                            enqueuePrivateAPI(request)
                         }
                     }
                 }
@@ -93,7 +94,7 @@ enum ThumbnailCapture {
     }
 
     @available(macOS 14.0, *)
-    private static func capture(_ scWindow: SCWindow, request: CaptureRequest, source: Source) {
+    private static func capture(_ scWindow: SCWindow, request: CaptureRequest) {
         screenshotsQueue.addOperation { [weak window = request.window] in
             guard let window else { return }
             let filter = SCContentFilter(desktopIndependentWindow: scWindow)
@@ -104,7 +105,7 @@ enum ThumbnailCapture {
                     image = cgImageFromPixelBuffer(pixelBuffer)
                 }
                 let finalImage = image ?? captureWithPrivateAPI(request.windowId)
-                DispatchQueue.main.async { applyThumbnail(finalImage, to: window, source: source) }
+                DispatchQueue.main.async { applyThumbnail(finalImage, to: window, revision: request.revision) }
             }
         }
     }
@@ -128,15 +129,15 @@ enum ThumbnailCapture {
 
     // MARK: - Private API
 
-    private static func refreshWithPrivateAPI(_ requests: [CaptureRequest], source: Source) {
-        for request in requests { enqueuePrivateAPI(request, source: source) }
+    private static func refreshWithPrivateAPI(_ requests: [CaptureRequest]) {
+        for request in requests { enqueuePrivateAPI(request) }
     }
 
-    private static func enqueuePrivateAPI(_ request: CaptureRequest, source: Source) {
+    private static func enqueuePrivateAPI(_ request: CaptureRequest) {
         screenshotsQueue.addOperation { [weak window = request.window] in
             guard let window else { return }
             let image = captureWithPrivateAPI(request.windowId)
-            DispatchQueue.main.async { applyThumbnail(image, to: window, source: source) }
+            DispatchQueue.main.async { applyThumbnail(image, to: window, revision: request.revision) }
         }
     }
 
@@ -154,14 +155,13 @@ enum ThumbnailCapture {
     private struct CaptureRequest {
         let windowId: CGWindowID
         let contentSize: CGSize?
+        let revision: UInt64
         weak var window: WindowInfo?
     }
 
     @MainActor
-    private static func applyThumbnail(_ image: CGImage?, to window: WindowInfo, source: Source) {
-        if source == .afterShowUi, !switcherIsActive() { return }
-        if window.thumbnail === image { return }
-        window.thumbnail = image
+    private static func applyThumbnail(_ image: CGImage?, to window: WindowInfo, revision: UInt64) {
+        guard window.applyThumbnail(image, revision: revision) else { return }
         onThumbnailUpdated(window.windowId)
     }
 

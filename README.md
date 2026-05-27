@@ -4,7 +4,7 @@ lightweight macos alt-tab
 ## building
 
 ```bash
-xcodebuild -scheme AltTab -configuration Debug build
+xcodebuild -scheme AltTab -configuration Release build
 ```
 
 ## tests
